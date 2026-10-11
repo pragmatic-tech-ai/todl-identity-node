@@ -41,7 +41,20 @@ test('duplicate email is rejected', async () =>
     const store = await FileAccountStore.Open(new FakeStorage())
     const tenant = tenant1
     await store.CreateAccount(tenant, 'a@x.io', 'p1', 'r1')
-    await assert.rejects(() => store.CreateAccount(tenant, 'a@x.io', 'p2', 'r2'))
+    await assert.rejects(() => store.CreateAccount(tenant1, 'a@x.io', 'p2', 'r2'), /already registered/)
+})
+
+test('duplicate principal id is rejected', async () =>
+{
+    const store = await FileAccountStore.Open(new FakeStorage())
+    await store.CreateAccount(tenant1, 'a@x.io', 'p1', 'r1')
+    await assert.rejects(() => store.CreateAccount(tenant1, 'b@x.io', 'p1', 'r2'), /principal already registered/)
+})
+
+test('a separator in the principal id is rejected', async () =>
+{
+    const store = await FileAccountStore.Open(new FakeStorage())
+    await assert.rejects(() => store.CreateAccount(tenant1, 'a@x.io', 'p/1', 'r1'), /must not contain the key separator/)
 })
 
 test('GroupsOf prefers the principal groups then the stored groups', async () =>

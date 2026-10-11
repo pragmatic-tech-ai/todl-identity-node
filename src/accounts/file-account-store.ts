@@ -65,7 +65,16 @@ export class FileAccountStore implements ILocalAccountStore, IPrincipalDirectory
         const record: AccountRecord = { principalId, tenantId: tenant.Id, email, secretRef, groups: [] }
         this.byEmail.set(emailKey, record)
         this.byPrincipal.set(principalKey, record)
-        await this.persist()
+        try
+        {
+            await this.persist()
+        }
+        catch (error)
+        {
+            this.byEmail.delete(emailKey)
+            this.byPrincipal.delete(principalKey)
+            throw error
+        }
         return new LocalAccount(principalId, tenant.Id, email, secretRef)
     }
 
