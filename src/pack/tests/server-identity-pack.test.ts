@@ -4,6 +4,7 @@ import { randomBytes } from 'node:crypto'
 import { AuthMethod, DelegationDepth, Tenant, TenantKind, PresentedSecret, Credential, AuthenticatedResult } from '@pragmatic-tech-ai/todl-identity'
 import { FakeStorage } from '@pragmatic-tech-ai/todl-runtime'
 import { ServerIdentityPack } from '../server-identity-pack.js'
+import { FileIdentityStores } from '../file-identity-stores.js'
 
 const tenant1 = new Tenant('t1', TenantKind.SelfHosted, 'Tenant One')
 
@@ -43,4 +44,18 @@ test('registered accounts and their password hashes persist across reopen', asyn
     const second = await ServerIdentityPack.Open(storage, Buffer.from(key))
     const result = await second.AuthenticatorFor(AuthMethod.Local)!.Authenticate(new Credential(AuthMethod.Local, 'a@x.io'), new PresentedSecret('pw-123456'), tenant1)
     assert.ok(result instanceof AuthenticatedResult)
+})
+
+test('OpenWith over a file store-set exposes the same stores and authenticators as Open', async () =>
+{
+    const stores = await FileIdentityStores.Open(new FakeStorage(), randomBytes(32))
+    const pack = ServerIdentityPack.OpenWith(stores)
+    assert.equal(pack.Secrets, stores.Secrets)
+    assert.equal(pack.Tokens, stores.Tokens)
+    assert.equal(pack.Directory, stores.Accounts)
+    assert.equal(pack.Grants, stores.Grants)
+    assert.equal(pack.Sessions, stores.Sessions)
+    assert.equal(pack.Audit, stores.Audit)
+    assert.ok(pack.AuthenticatorFor(AuthMethod.ServiceToken))
+    assert.ok(pack.AuthenticatorFor(AuthMethod.Local))
 })
