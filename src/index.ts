@@ -5,3 +5,4 @@ export { FileEncryptedSecretStore } from './secrets/file-encrypted-secret-store.
 export { FileAccountStore } from './accounts/file-account-store.js'
 export { FileServiceTokenStore } from './tokens/file-service-token-store.js'
 export { FileSessionStore } from './sessions/file-session-store.js'
+export { FileRoleGrantStore } from './grants/file-role-grant-store.js'
