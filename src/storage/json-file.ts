@@ -22,7 +22,8 @@ export class JsonFile
         }
         try
         {
-            return JSON.parse(await this.storage.ReadText(this.path)) as T
+            const parsed = JSON.parse(await this.storage.ReadText(this.path)) as T
+            return parsed ?? fallback
         }
         catch
         {
@@ -33,7 +34,7 @@ export class JsonFile
     public Write(value: unknown): Promise<void>
     {
         const text = JSON.stringify(value, null, 2)
-        this.writeChain = this.writeChain.then(() => this.storage.WriteText(this.path, text))
+        this.writeChain = this.writeChain.catch(() => {}).then(() => this.storage.WriteText(this.path, text))
         return this.writeChain
     }
 }
