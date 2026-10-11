@@ -1,0 +1,27 @@
+{
+  "name": "@pragmatic-tech-ai/todl-identity-node",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "tsx --test \"src/**/*.test.ts\""
+  },
+  "dependencies": {
+    "@pragmatic-tech-ai/todl-identity": "file:../todl-identity",
+    "@pragmatic-tech-ai/todl-identity-local": "file:../todl-identity-local",
+    "@pragmatic-tech-ai/todl-identity-host": "file:../todl-identity-host",
+    "@pragmatic-tech-ai/todl-runtime": "file:../todl-runtime"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "tsx": "^4.0.0",
+    "typescript": "^5.5.0"
+  }
+}
