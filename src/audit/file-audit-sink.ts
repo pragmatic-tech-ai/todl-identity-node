@@ -26,7 +26,8 @@ interface AuditDocument
  *  recomputes the chain and verifies it against the persisted hashes (fail-closed: a mismatch or a
  *  per-tenant sequence gap throws AuditTamperDetected). Legacy files with no hashes are backfilled
  *  prefix-only (a hashless record after a hashed one for the same tenant is tamper). Concurrent
- *  full-file rewrites remain OUT OF SCOPE (single-node store). */
+ *  full-file rewrites across processes remain OUT OF SCOPE (single-node store); in-process
+ *  Record calls are serialized on one sink-wide queue. */
 export class FileAuditSink implements IAuditSink
 {
     private static readonly FileName = 'audit.json'
@@ -34,6 +35,7 @@ export class FileAuditSink implements IAuditSink
     private readonly file: JsonFile
     private readonly chain: HashChainedAuditSink
     private readonly events: EventRecord[]
+    private writes: Promise<unknown> = Promise.resolve()
 
     private constructor(file: JsonFile, chain: HashChainedAuditSink, events: EventRecord[])
     {
@@ -87,7 +89,14 @@ export class FileAuditSink implements IAuditSink
         return new FileAuditSink(file, chain, [...document.events])
     }
 
-    public async Record(event: AuditEvent): Promise<void>
+    public Record(event: AuditEvent): Promise<void>
+    {
+        const run = this.writes.then(() => this.Commit(event))
+        this.writes = run.catch(() => undefined)
+        return run
+    }
+
+    private async Commit(event: AuditEvent): Promise<void>
     {
         const next = this.chain.Next(event.TenantId, event)
         const record: EventRecord = { kind: event.Kind, tenantId: event.TenantId, principalId: event.PrincipalId, at: event.At.toISOString(), detail: [...event.Detail], hash: next.Hash, prevHash: next.PrevHash }
