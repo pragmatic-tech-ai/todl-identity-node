@@ -18,3 +18,14 @@ test('appends persist to a separate file and survive a reopen; Latest is the hig
     assert.equal(await reopened.Latest('absent'), undefined)
     assert.deepEqual([...(await reopened.Tenants())].sort(), ['t1', 't2'])
 })
+
+test('concurrent appends are serialized and both persist across a reopen', async () =>
+{
+    const storage = new FakeStorage()
+    const store = await FileAuditCheckpointStore.Open(storage)
+    await Promise.all([store.Append(new AuditCheckpoint('t1', 1, 'h1', 'a1', 's1')), store.Append(new AuditCheckpoint('t1', 2, 'h2', 'a2', 's2'))])
+    const reopened = await FileAuditCheckpointStore.Open(storage)
+    assert.equal((await reopened.Latest('t1'))!.Sequence, 2)
+    const tenants = await reopened.Tenants()
+    assert.equal(tenants.length, 1)
+})

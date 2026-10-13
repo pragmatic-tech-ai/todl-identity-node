@@ -27,6 +27,7 @@ export class FileAuditCheckpointStore implements IAuditCheckpointStore
 
     private readonly file: JsonFile
     private readonly checkpoints: CheckpointRecord[]
+    private writes: Promise<void> = Promise.resolve()
 
     private constructor(file: JsonFile, checkpoints: CheckpointRecord[])
     {
@@ -56,7 +57,14 @@ export class FileAuditCheckpointStore implements IAuditCheckpointStore
             : new AuditCheckpoint(best.tenantId, best.sequence, best.headHash, best.at, best.signature))
     }
 
-    public async Append(checkpoint: AuditCheckpoint): Promise<void>
+    public Append(checkpoint: AuditCheckpoint): Promise<void>
+    {
+        const run = this.writes.then(() => this.Commit(checkpoint))
+        this.writes = run.catch(() => undefined)
+        return run
+    }
+
+    private async Commit(checkpoint: AuditCheckpoint): Promise<void>
     {
         const record: CheckpointRecord = { tenantId: checkpoint.TenantId, sequence: checkpoint.Sequence, headHash: checkpoint.HeadHash, at: checkpoint.At, signature: checkpoint.Signature }
         await this.file.Write({ checkpoints: [...this.checkpoints, record] } satisfies AnchorDocument)
