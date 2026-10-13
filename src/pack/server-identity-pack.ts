@@ -4,6 +4,7 @@ import { Argon2PasswordHasher, LocalAccountRegistrar, LocalPasswordAuthenticator
 import type { IStorage } from '@pragmatic-tech-ai/todl-runtime'
 import { FileIdentityStores } from './file-identity-stores.js'
 
+/** Optional per-pack composition: extra authenticators appended after token+local, delegation depth, and access policy. */
 export interface ServerIdentityPackComposition
 {
     ExtraAuthenticators?: readonly IAuthenticator[]
