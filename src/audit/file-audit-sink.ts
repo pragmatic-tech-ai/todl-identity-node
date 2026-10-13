@@ -103,6 +103,8 @@ export class FileAuditSink implements IAuditSink
         await this.file.Write({ events: [...this.events, record] } satisfies AuditDocument)
         this.events.push(record)
         this.chain.Append(next)
+        // The event is already durable and chained above; a throw here only means its checkpoint
+        // lag is caught as an un-anchored tail on the next Open (never a checkpoint ahead of its event).
         if (this.anchoring !== undefined)
         {
             await this.anchoring.CheckpointIfDue(event.TenantId, this.chain.Records(event.TenantId))
