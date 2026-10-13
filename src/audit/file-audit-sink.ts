@@ -1,7 +1,7 @@
 import { AuditEvent } from '@pragmatic-tech-ai/todl-identity'
 import type { AuditEventKind, IAuditSink } from '@pragmatic-tech-ai/todl-identity'
 import { AuditTamperDetected, HashChainedAuditSink } from '@pragmatic-tech-ai/todl-identity-host'
-import type { ChainedAuditRecord } from '@pragmatic-tech-ai/todl-identity-host'
+import type { AuditAnchoring, ChainedAuditRecord } from '@pragmatic-tech-ai/todl-identity-host'
 import type { IStorage } from '@pragmatic-tech-ai/todl-runtime'
 import { JsonFile } from '../storage/json-file.js'
 
@@ -35,16 +35,18 @@ export class FileAuditSink implements IAuditSink
     private readonly file: JsonFile
     private readonly chain: HashChainedAuditSink
     private readonly events: EventRecord[]
+    private readonly anchoring?: AuditAnchoring
     private writes: Promise<unknown> = Promise.resolve()
 
-    private constructor(file: JsonFile, chain: HashChainedAuditSink, events: EventRecord[])
+    private constructor(file: JsonFile, chain: HashChainedAuditSink, events: EventRecord[], anchoring?: AuditAnchoring)
     {
         this.file = file
         this.chain = chain
         this.events = events
+        this.anchoring = anchoring
     }
 
-    public static async Open(storage: IStorage): Promise<FileAuditSink>
+    public static async Open(storage: IStorage, anchoring?: AuditAnchoring): Promise<FileAuditSink>
     {
         const file = new JsonFile(storage, FileAuditSink.FileName)
         const document = await file.Read<AuditDocument>({ events: [] })
@@ -79,7 +81,12 @@ export class FileAuditSink implements IAuditSink
         {
             await file.Write({ events: document.events } satisfies AuditDocument)
         }
-        return new FileAuditSink(file, chain, [...document.events])
+        if (anchoring !== undefined)
+        {
+            const tenants = [...new Set(document.events.map(e => e.tenantId))]
+            await anchoring.VerifyAll(chain, tenants)
+        }
+        return new FileAuditSink(file, chain, [...document.events], anchoring)
     }
 
     public Record(event: AuditEvent): Promise<void>
@@ -96,6 +103,10 @@ export class FileAuditSink implements IAuditSink
         await this.file.Write({ events: [...this.events, record] } satisfies AuditDocument)
         this.events.push(record)
         this.chain.Append(next)
+        if (this.anchoring !== undefined)
+        {
+            await this.anchoring.CheckpointIfDue(event.TenantId, this.chain.Records(event.TenantId))
+        }
     }
 
     public Verify(tenantId: string): boolean
