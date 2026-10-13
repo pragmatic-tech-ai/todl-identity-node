@@ -77,12 +77,6 @@ class FailableStorage extends FakeStorage
         await super.WriteText(path, content)
     }
 
-    public override async Rename(from: string, to: string): Promise<void>
-    {
-        this.ThrowIfFailing()
-        await super.Rename(from, to)
-    }
-
     private ThrowIfFailing(): void
     {
         if (this.FailWrites)

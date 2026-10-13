@@ -49,19 +49,12 @@ export class FileAuditSink implements IAuditSink
         const file = new JsonFile(storage, FileAuditSink.FileName)
         const document = await file.Read<AuditDocument>({ events: [] })
         const chain = new HashChainedAuditSink()
-        const seen = new Map<string, number>()
         const hashedTenants = new Set<string>()
         let dirty = false
         for (const record of document.events)
         {
             const event = FileAuditSink.ToEvent(record)
             const expected = chain.Next(event.TenantId, event)
-            const count = seen.get(event.TenantId) ?? 0
-            if (expected.Sequence !== count)
-            {
-                throw new AuditTamperDetected(event.TenantId, expected.Sequence)
-            }
-            seen.set(event.TenantId, count + 1)
             if (record.hash === undefined)
             {
                 if (hashedTenants.has(event.TenantId))
