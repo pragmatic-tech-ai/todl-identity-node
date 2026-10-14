@@ -33,7 +33,7 @@ test('a SecurityModel round-trips through Save/Get and a reopen', async () =>
     const got = await reopened.Get('t1')
     assert.deepEqual(got?.SecurityModel, Fixture.SecurityModel())
     // the string enum persists as its token, not a numeric index
-    assert.equal(got?.SecurityModel?.ownershipRules[0].owningBusinessUnit.kind, OwnershipSourceKind.FromField)
+    assert.equal(got?.SecurityModel?.ownershipRules[0].owningBusinessUnit.kind, 'fromField')
 })
 
 test('an absent SecurityModel round-trips as undefined', async () =>
