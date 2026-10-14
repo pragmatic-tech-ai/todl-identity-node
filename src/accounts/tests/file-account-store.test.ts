@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { Tenant, TenantKind, Principal, PrincipalKind } from '@pragmatic-tech-ai/todl-identity'
 import { FakeStorage } from '@pragmatic-tech-ai/todl-runtime'
+import { LocalAccountNotFoundError } from '@pragmatic-tech-ai/todl-identity'
 import { FileAccountStore } from '../file-account-store.js'
 
 const tenant1 = new Tenant('t1', TenantKind.SelfHosted, 'Tenant One')
@@ -66,4 +67,47 @@ test('GroupsOf prefers the principal groups then the stored groups', async () =>
     assert.deepEqual(await store.GroupsOf(withGroups), ['g1'])
     const noGroups = new Principal('p1', 't1', PrincipalKind.User, new Map(), [])
     assert.deepEqual(await store.GroupsOf(noGroups), [])
+})
+
+const tenant2 = new Tenant('t2', TenantKind.SelfHosted, 'Tenant Two')
+
+test('ListAccounts is tenant-scoped and shows Disabled=false for new accounts', async () =>
+{
+    const store = await FileAccountStore.Open(new FakeStorage())
+    await store.CreateAccount(tenant1, 'a@x.io', 'p1', 'r1')
+    await store.CreateAccount(tenant2, 'b@x.io', 'p2', 'r2')
+    const listed = await store.ListAccounts(tenant1)
+    assert.deepEqual(listed.map(a => a.PrincipalId), ['p1'])
+    assert.equal(listed[0].Disabled, false)
+})
+
+test('Disable hides the account from Lookup but FindBy still returns it, and survives reopen', async () =>
+{
+    const storage = new FakeStorage()
+    const store = await FileAccountStore.Open(storage)
+    await store.CreateAccount(tenant1, 'a@x.io', 'p1', 'r1')
+    await store.Disable(tenant1, 'p1')
+    assert.equal(await store.Lookup('p1', tenant1), null)
+    assert.equal((await store.FindByEmail(tenant1, 'a@x.io'))?.Disabled, true)
+    assert.equal((await store.FindByPrincipalId(tenant1, 'p1'))?.Disabled, true)
+    const reopened = await FileAccountStore.Open(storage)
+    assert.equal((await reopened.ListAccounts(tenant1))[0].Disabled, true)
+    assert.equal(await reopened.Lookup('p1', tenant1), null)
+})
+
+test('Disable of an unknown principal or another tenant throws LocalAccountNotFoundError', async () =>
+{
+    const store = await FileAccountStore.Open(new FakeStorage())
+    await store.CreateAccount(tenant1, 'a@x.io', 'p1', 'r1')
+    await assert.rejects(() => store.Disable(tenant1, 'nope'), LocalAccountNotFoundError)
+    await assert.rejects(() => store.Disable(tenant2, 'p1'), LocalAccountNotFoundError)
+})
+
+test('a legacy record without the disabled field reads back enabled', async () =>
+{
+    const storage = new FakeStorage()
+    await storage.WriteText('accounts.json', JSON.stringify({ accounts: [{ principalId: 'p1', tenantId: 't1', email: 'a@x.io', secretRef: 'r1', groups: [] }] }))
+    const store = await FileAccountStore.Open(storage)
+    assert.equal((await store.ListAccounts(tenant1))[0].Disabled, false)
+    assert.equal((await store.Lookup('p1', tenant1))?.Id, 'p1')
 })

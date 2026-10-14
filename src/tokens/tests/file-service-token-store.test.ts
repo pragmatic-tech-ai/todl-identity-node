@@ -53,3 +53,22 @@ test('expired, wrong-tenant, revoked and unknown tokens resolve to null', async 
 
     assert.equal(await store.Resolve(tenant, new PresentedSecret('not-a-token')), null)
 })
+
+test('List is tenant-scoped, reflects revocation and never exposes the token value', async () =>
+{
+    const store = await FileServiceTokenStore.Open(new FakeStorage())
+    const other = new Tenant('t2', TenantKind.SelfHosted, 'Other')
+    const issued = await store.Issue(tenant1, 'svc1', ['read'], null)
+    await store.Issue(other, 'svc2', [], null)
+    let listed = await store.List(tenant1)
+    assert.equal(listed.length, 1)
+    assert.equal(listed[0].TokenRef, issued.Grant.TokenRef)
+    assert.equal(listed[0].PrincipalId, 'svc1')
+    assert.deepEqual(listed[0].Scopes, ['read'])
+    assert.equal(listed[0].Revoked, false)
+    assert.ok(!JSON.stringify(listed).includes(issued.Token))
+    await store.Revoke(tenant1, issued.Grant.TokenRef)
+    listed = await store.List(tenant1)
+    assert.equal(listed[0].Revoked, true)
+    assert.equal((await store.List(other)).length, 1)
+})

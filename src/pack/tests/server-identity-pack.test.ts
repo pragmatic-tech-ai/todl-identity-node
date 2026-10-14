@@ -59,3 +59,10 @@ test('OpenWith over a file store-set exposes the same stores and authenticators 
     assert.ok(pack.AuthenticatorFor(AuthMethod.ServiceToken))
     assert.ok(pack.AuthenticatorFor(AuthMethod.Local))
 })
+
+test('Accounts is the same object as Directory and supports ListAccounts', async () =>
+{
+    const pack = await ServerIdentityPack.Open(new FakeStorage(), randomBytes(32))
+    assert.equal(pack.Accounts, pack.Directory)
+    assert.deepEqual(await pack.Accounts.ListAccounts(new Tenant('t1', TenantKind.SelfHosted, 'T')), [])
+})

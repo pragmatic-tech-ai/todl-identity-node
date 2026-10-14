@@ -1,4 +1,4 @@
-import { LocalAccount, Principal, PrincipalKind } from '@pragmatic-tech-ai/todl-identity'
+import { LocalAccount, LocalAccountNotFoundError, Principal, PrincipalKind } from '@pragmatic-tech-ai/todl-identity'
 import type { ILocalAccountStore, IPrincipalDirectory, Tenant } from '@pragmatic-tech-ai/todl-identity'
 import type { IStorage } from '@pragmatic-tech-ai/todl-runtime'
 import { JsonFile } from '../storage/json-file.js'
@@ -10,6 +10,7 @@ interface AccountRecord
     email: string
     secretRef: string
     groups: readonly string[]
+    disabled?: boolean
 }
 
 interface AccountDocument
@@ -62,7 +63,7 @@ export class FileAccountStore implements ILocalAccountStore, IPrincipalDirectory
         {
             throw new Error(FileAccountStore.DuplicatePrincipalMessage)
         }
-        const record: AccountRecord = { principalId, tenantId: tenant.Id, email, secretRef, groups: [] }
+        const record: AccountRecord = { principalId, tenantId: tenant.Id, email, secretRef, groups: [], disabled: false }
         this.byEmail.set(emailKey, record)
         this.byPrincipal.set(principalKey, record)
         try
@@ -75,7 +76,40 @@ export class FileAccountStore implements ILocalAccountStore, IPrincipalDirectory
             this.byPrincipal.delete(principalKey)
             throw error
         }
-        return new LocalAccount(principalId, tenant.Id, email, secretRef)
+        return new LocalAccount(principalId, tenant.Id, email, secretRef, false)
+    }
+
+    public async Disable(tenant: Tenant, principalId: string): Promise<void>
+    {
+        const record = this.byPrincipal.get(FileAccountStore.Key(tenant.Id, principalId))
+        if (record === undefined)
+        {
+            throw new LocalAccountNotFoundError(principalId)
+        }
+        const previous = record.disabled
+        record.disabled = true
+        try
+        {
+            await this.persist()
+        }
+        catch (error)
+        {
+            record.disabled = previous
+            throw error
+        }
+    }
+
+    public async ListAccounts(tenant: Tenant): Promise<readonly LocalAccount[]>
+    {
+        const accounts: LocalAccount[] = []
+        for (const record of this.byPrincipal.values())
+        {
+            if (record.tenantId === tenant.Id)
+            {
+                accounts.push(FileAccountStore.Map(record))
+            }
+        }
+        return accounts
     }
 
     public async FindByEmail(tenant: Tenant, email: string): Promise<LocalAccount | null>
@@ -91,7 +125,7 @@ export class FileAccountStore implements ILocalAccountStore, IPrincipalDirectory
     public async Lookup(principalId: string, tenant: Tenant): Promise<Principal | null>
     {
         const record = this.byPrincipal.get(FileAccountStore.Key(tenant.Id, principalId))
-        if (record === undefined)
+        if (record === undefined || record.disabled === true)
         {
             return null
         }
@@ -119,7 +153,12 @@ export class FileAccountStore implements ILocalAccountStore, IPrincipalDirectory
         {
             return null
         }
-        return new LocalAccount(record.principalId, record.tenantId, record.email, record.secretRef)
+        return FileAccountStore.Map(record)
+    }
+
+    private static Map(record: AccountRecord): LocalAccount
+    {
+        return new LocalAccount(record.principalId, record.tenantId, record.email, record.secretRef, record.disabled === true)
     }
 
     private static Key(tenantId: string, id: string): string

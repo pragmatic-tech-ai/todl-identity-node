@@ -1,5 +1,5 @@
 import { randomBytes, createHash } from 'node:crypto'
-import { ServiceTokenGrant } from '@pragmatic-tech-ai/todl-identity'
+import { ServiceTokenGrant, ServiceTokenSummary } from '@pragmatic-tech-ai/todl-identity'
 import type { IServiceTokenStore, Tenant, PresentedSecret } from '@pragmatic-tech-ai/todl-identity'
 import type { IStorage } from '@pragmatic-tech-ai/todl-runtime'
 import { JsonFile } from '../storage/json-file.js'
@@ -81,6 +81,19 @@ export class FileServiceTokenStore implements IServiceTokenStore
             record.revoked = true
             await this.persist()
         }
+    }
+
+    public async List(tenant: Tenant): Promise<readonly ServiceTokenSummary[]>
+    {
+        const summaries: ServiceTokenSummary[] = []
+        for (const record of this.records.values())
+        {
+            if (record.tenantId === tenant.Id)
+            {
+                summaries.push(new ServiceTokenSummary(record.tokenRef, record.principalId, [...record.scopes], record.expiresAt === null ? null : new Date(record.expiresAt), record.revoked))
+            }
+        }
+        return summaries
     }
 
     private persist(): Promise<void>

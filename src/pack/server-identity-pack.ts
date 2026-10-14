@@ -1,5 +1,5 @@
 import { DelegationDepth, ResourceAuthorizationPolicy } from '@pragmatic-tech-ai/todl-identity'
-import type { AuthMethod, IAccessPolicy, IAuthenticator, IIdentityProviderPack, IPrincipalDirectory, ISessionManager, IRoleGrantStore, IAuditSink, ISecretStore, IServiceTokenStore, IdentityStoreSet } from '@pragmatic-tech-ai/todl-identity'
+import type { AuthMethod, IAccessPolicy, IAuthenticator, IIdentityProviderPack, ILocalAccountStore, IPrincipalDirectory, ISessionManager, IRoleGrantStore, IAuditSink, ISecretStore, IServiceTokenStore, IdentityStoreSet } from '@pragmatic-tech-ai/todl-identity'
 import { Argon2PasswordHasher, LocalAccountRegistrar, LocalPasswordAuthenticator, ServiceTokenAuthenticator } from '@pragmatic-tech-ai/todl-identity-local'
 import type { IStorage } from '@pragmatic-tech-ai/todl-runtime'
 import { FileIdentityStores } from './file-identity-stores.js'
@@ -19,6 +19,7 @@ export class ServerIdentityPack implements IIdentityProviderPack
     public readonly Policy: IAccessPolicy
     public readonly Authenticators: readonly IAuthenticator[]
     public readonly Directory: IPrincipalDirectory
+    public readonly Accounts: ILocalAccountStore
     public readonly Sessions: ISessionManager
     public readonly Grants: IRoleGrantStore
     public readonly Audit: IAuditSink
@@ -31,6 +32,7 @@ export class ServerIdentityPack implements IIdentityProviderPack
         const hasher = new Argon2PasswordHasher()
         this.Secrets = stores.Secrets
         this.Directory = stores.Accounts
+        this.Accounts = stores.Accounts
         this.Tokens = stores.Tokens
         this.Sessions = stores.Sessions
         this.Grants = stores.Grants
