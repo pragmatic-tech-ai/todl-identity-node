@@ -1,11 +1,11 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { Tenant, TenantKind, Principal, PrincipalKind } from '@pragmatic-tech-ai/todl-identity'
+import { LocalAccountNotFoundError, Tenant, TenantKind, Principal, PrincipalKind } from '@pragmatic-tech-ai/todl-identity'
 import { FakeStorage } from '@pragmatic-tech-ai/todl-runtime'
-import { LocalAccountNotFoundError } from '@pragmatic-tech-ai/todl-identity'
 import { FileAccountStore } from '../file-account-store.js'
 
 const tenant1 = new Tenant('t1', TenantKind.SelfHosted, 'Tenant One')
+const tenant2 = new Tenant('t2', TenantKind.SelfHosted, 'Tenant Two')
 
 test('CreateAccount then find by email and principal', async () =>
 {
@@ -68,8 +68,6 @@ test('GroupsOf prefers the principal groups then the stored groups', async () =>
     const noGroups = new Principal('p1', 't1', PrincipalKind.User, new Map(), [])
     assert.deepEqual(await store.GroupsOf(noGroups), [])
 })
-
-const tenant2 = new Tenant('t2', TenantKind.SelfHosted, 'Tenant Two')
 
 test('ListAccounts is tenant-scoped and shows Disabled=false for new accounts', async () =>
 {
