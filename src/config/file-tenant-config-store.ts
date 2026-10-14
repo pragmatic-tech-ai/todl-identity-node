@@ -1,5 +1,5 @@
 import { IdentityConfig } from '@pragmatic-tech-ai/todl-identity'
-import type { DelegationDepth, Role, ITenantConfigStore } from '@pragmatic-tech-ai/todl-identity'
+import type { DelegationDepth, Role, ITenantConfigStore, ISecurityModelConfig } from '@pragmatic-tech-ai/todl-identity'
 import type { IStorage } from '@pragmatic-tech-ai/todl-runtime'
 import { JsonFile } from '../storage/json-file.js'
 
@@ -10,6 +10,7 @@ interface ConfigRecord
     providerSettings: Array<[string, string]>
     groupRoleMap: Array<[string, Role]>
     claimsMapping: Array<[string, string]>
+    securityModel?: ISecurityModelConfig
 }
 
 interface ConfigDocument
@@ -44,12 +45,12 @@ export class FileTenantConfigStore implements ITenantConfigStore
         {
             return null
         }
-        return new IdentityConfig(record.packId, record.delegationDepth, new Map(record.providerSettings), new Map(record.groupRoleMap), new Map(record.claimsMapping))
+        return new IdentityConfig(record.packId, record.delegationDepth, new Map(record.providerSettings), new Map(record.groupRoleMap), new Map(record.claimsMapping), record.securityModel)
     }
 
     public async Save(tenantId: string, config: IdentityConfig): Promise<void>
     {
-        this.configs.set(tenantId, { packId: config.PackId, delegationDepth: config.DelegationDepth, providerSettings: [...config.ProviderSettings], groupRoleMap: [...config.GroupRoleMap], claimsMapping: [...config.ClaimsMapping] })
+        this.configs.set(tenantId, { packId: config.PackId, delegationDepth: config.DelegationDepth, providerSettings: [...config.ProviderSettings], groupRoleMap: [...config.GroupRoleMap], claimsMapping: [...config.ClaimsMapping], securityModel: config.SecurityModel })
         await this.file.Write({ configs: Object.fromEntries(this.configs) } satisfies ConfigDocument)
     }
 
