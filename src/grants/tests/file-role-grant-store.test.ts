@@ -37,3 +37,35 @@ test('GrantsFor returns only the asked subject', async () =>
     await store.Save(new Grant('p2', Role.Viewer, new ResourceRef(ResourceKind.Tenant, 't1', [])))
     assert.equal((await store.GrantsFor('p2', tenant1)).length, 1)
 })
+
+test('Revoke removes the matching grant and persists across reopen', async () =>
+{
+    const storage = new FakeStorage()
+    const store = await FileRoleGrantStore.Open(storage)
+    await store.Save(editorGrant)
+    await store.Revoke(new Grant('p1', Role.Editor, new ResourceRef(ResourceKind.Model, 't1', ['sol', 'proj'])))
+    assert.equal((await store.GrantsFor('p1', tenant1)).length, 0)
+    const reopened = await FileRoleGrantStore.Open(storage)
+    assert.equal((await reopened.GrantsFor('p1', tenant1)).length, 0)
+})
+
+test('Revoke leaves a different grant', async () =>
+{
+    const store = await FileRoleGrantStore.Open(new FakeStorage())
+    await store.Save(editorGrant)
+    await store.Save(new Grant('p1', Role.Viewer, new ResourceRef(ResourceKind.Model, 't1', ['sol', 'proj'])))
+    await store.Save(new Grant('p1', Role.Editor, new ResourceRef(ResourceKind.Model, 't1', ['sol'])))
+    await store.Revoke(editorGrant)
+    const grants = await store.GrantsFor('p1', tenant1)
+    assert.equal(grants.length, 2)
+    assert.ok(grants.some(g => g.Role === Role.Viewer))
+    assert.ok(grants.some(g => g.Resource.Path.length === 1))
+})
+
+test('Revoke is a no-op when nothing matches', async () =>
+{
+    const store = await FileRoleGrantStore.Open(new FakeStorage())
+    await store.Save(editorGrant)
+    await store.Revoke(new Grant('p1', Role.Owner, new ResourceRef(ResourceKind.Model, 't1', ['sol', 'proj'])))
+    assert.equal((await store.GrantsFor('p1', tenant1)).length, 1)
+})

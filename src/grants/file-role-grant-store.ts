@@ -48,6 +48,19 @@ export class FileRoleGrantStore implements IRoleGrantStore
         await this.file.Write({ grants: this.grants } satisfies GrantDocument)
     }
 
+    public async Revoke(grant: Grant): Promise<void>
+    {
+        const kept = this.grants.filter(record => !FileRoleGrantStore.Matches(record, grant))
+        this.grants.length = 0
+        this.grants.push(...kept)
+        await this.file.Write({ grants: this.grants } satisfies GrantDocument)
+    }
+
+    private static Matches(record: GrantRecord, grant: Grant): boolean
+    {
+        return record.subject === grant.Subject && record.role === grant.Role && record.resourceKind === grant.Resource.Kind && record.resourceTenantId === grant.Resource.TenantId && record.resourcePath.length === grant.Resource.Path.length && record.resourcePath.every((p, i) => p === grant.Resource.Path[i])
+    }
+
     private static ToGrant(record: GrantRecord): Grant
     {
         return new Grant(record.subject, record.role, new ResourceRef(record.resourceKind, record.resourceTenantId, [...record.resourcePath]))
