@@ -69,3 +69,15 @@ test('Revoke is a no-op when nothing matches', async () =>
     await store.Revoke(new Grant('p1', Role.Owner, new ResourceRef(ResourceKind.Model, 't1', ['sol', 'proj'])))
     assert.equal((await store.GrantsFor('p1', tenant1)).length, 1)
 })
+
+test('GrantsOn returns only grants on exactly the given resource', async () =>
+{
+    const store = await FileRoleGrantStore.Open(new FakeStorage())
+    const root1 = new ResourceRef(ResourceKind.Tenant, 't1', [])
+    await store.Save(new Grant('a1', Role.Admin, root1))
+    await store.Save(new Grant('a2', Role.Admin, new ResourceRef(ResourceKind.Tenant, 't2', [])))
+    await store.Save(new Grant('e1', Role.Editor, new ResourceRef(ResourceKind.Project, 't1', ['sol'])))
+    const grants = await store.GrantsOn(root1)
+    assert.deepEqual(grants.map(g => g.Subject), ['a1'])
+    assert.equal((await store.GrantsOn(new ResourceRef(ResourceKind.Project, 't1', ['sol']))).length, 1)
+})

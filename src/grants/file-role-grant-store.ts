@@ -42,6 +42,11 @@ export class FileRoleGrantStore implements IRoleGrantStore
         return this.grants.filter(record => record.subject === subject).map(FileRoleGrantStore.ToGrant)
     }
 
+    public async GrantsOn(resource: ResourceRef): Promise<readonly Grant[]>
+    {
+        return this.grants.filter(record => FileRoleGrantStore.IsOn(record, resource)).map(FileRoleGrantStore.ToGrant)
+    }
+
     public async Save(grant: Grant): Promise<void>
     {
         this.grants.push({ subject: grant.Subject, role: grant.Role, resourceKind: grant.Resource.Kind, resourceTenantId: grant.Resource.TenantId, resourcePath: [...grant.Resource.Path] })
@@ -59,6 +64,11 @@ export class FileRoleGrantStore implements IRoleGrantStore
     private static Matches(record: GrantRecord, grant: Grant): boolean
     {
         return record.subject === grant.Subject && record.role === grant.Role && record.resourceKind === grant.Resource.Kind && record.resourceTenantId === grant.Resource.TenantId && record.resourcePath.length === grant.Resource.Path.length && record.resourcePath.every((p, i) => p === grant.Resource.Path[i])
+    }
+
+    private static IsOn(record: GrantRecord, resource: ResourceRef): boolean
+    {
+        return record.resourceKind === resource.Kind && record.resourceTenantId === resource.TenantId && record.resourcePath.length === resource.Path.length && record.resourcePath.every((p, i) => p === resource.Path[i])
     }
 
     private static ToGrant(record: GrantRecord): Grant
