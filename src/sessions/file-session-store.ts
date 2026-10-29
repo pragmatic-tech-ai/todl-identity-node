@@ -1,6 +1,6 @@
 import { randomBytes, createHash } from 'node:crypto'
 import { Session, AuthMethod } from '@pragmatic-tech-ai/todl-identity'
-import type { ISessionManager, Principal } from '@pragmatic-tech-ai/todl-identity'
+import type { ISessionManager, Principal, Tenant } from '@pragmatic-tech-ai/todl-identity'
 import type { IStorage } from '@pragmatic-tech-ai/todl-runtime'
 import { JsonFile } from '../storage/json-file.js'
 
@@ -82,12 +82,12 @@ export class FileSessionStore implements ISessionManager
         }
     }
 
-    public async RevokeAllFor(principalId: string): Promise<void>
+    public async RevokeAllFor(tenant: Tenant, principalId: string): Promise<void>
     {
         let removed = false
         for (const [key, record] of [...this.sessions.entries()])
         {
-            if (record.principalId === principalId)
+            if (record.principalId === principalId && record.tenantId === tenant.Id)
             {
                 this.sessions.delete(key)
                 removed = true
