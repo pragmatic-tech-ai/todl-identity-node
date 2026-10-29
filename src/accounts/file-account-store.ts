@@ -99,6 +99,26 @@ export class FileAccountStore implements ILocalAccountStore, IPrincipalDirectory
         }
     }
 
+    public async Enable(tenant: Tenant, principalId: string): Promise<void>
+    {
+        const record = this.byPrincipal.get(FileAccountStore.Key(tenant.Id, principalId))
+        if (record === undefined)
+        {
+            throw new LocalAccountNotFoundError(principalId)
+        }
+        const previous = record.disabled
+        record.disabled = false
+        try
+        {
+            await this.persist()
+        }
+        catch (error)
+        {
+            record.disabled = previous
+            throw error
+        }
+    }
+
     public async ListAccounts(tenant: Tenant): Promise<readonly LocalAccount[]>
     {
         const accounts: LocalAccount[] = []

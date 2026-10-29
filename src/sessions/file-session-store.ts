@@ -82,6 +82,23 @@ export class FileSessionStore implements ISessionManager
         }
     }
 
+    public async RevokeAllFor(principalId: string): Promise<void>
+    {
+        let removed = false
+        for (const [key, record] of [...this.sessions.entries()])
+        {
+            if (record.principalId === principalId)
+            {
+                this.sessions.delete(key)
+                removed = true
+            }
+        }
+        if (removed)
+        {
+            await this.persist()
+        }
+    }
+
     private persist(): Promise<void>
     {
         return this.file.Write({ sessions: Object.fromEntries(this.sessions) } satisfies SessionDocument)

@@ -109,3 +109,24 @@ test('a legacy record without the disabled field reads back enabled', async () =
     assert.equal((await store.ListAccounts(tenant1))[0].Disabled, false)
     assert.equal((await store.Lookup('p1', tenant1))?.Id, 'p1')
 })
+
+test('Enable reverses Disable, restores Lookup, and survives reopen', async () =>
+{
+    const storage = new FakeStorage()
+    const store = await FileAccountStore.Open(storage)
+    await store.CreateAccount(tenant1, 'a@x.io', 'p1', 'r1')
+    await store.Disable(tenant1, 'p1')
+    await store.Enable(tenant1, 'p1')
+    assert.equal((await store.FindByPrincipalId(tenant1, 'p1'))?.Disabled, false)
+    assert.equal((await store.Lookup('p1', tenant1))?.Id, 'p1')
+    const reopened = await FileAccountStore.Open(storage)
+    assert.equal((await reopened.ListAccounts(tenant1))[0].Disabled, false)
+})
+
+test('Enable of an unknown principal or another tenant throws LocalAccountNotFoundError', async () =>
+{
+    const store = await FileAccountStore.Open(new FakeStorage())
+    await store.CreateAccount(tenant1, 'a@x.io', 'p1', 'r1')
+    await assert.rejects(() => store.Enable(tenant1, 'nope'), LocalAccountNotFoundError)
+    await assert.rejects(() => store.Enable(tenant2, 'p1'), LocalAccountNotFoundError)
+})
