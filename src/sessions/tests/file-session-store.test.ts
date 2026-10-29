@@ -70,3 +70,26 @@ test('RevokeAllFor removes every session of that principal only, and persists', 
     assert.equal(await reopened.Validate(a1.Id), null)
     assert.equal((await reopened.Validate(b1.Id))?.PrincipalId, 'p2')
 })
+
+class CountingStorage extends FakeStorage
+{
+    public Writes = 0
+
+    public override async WriteText(path: string, content: string): Promise<void>
+    {
+        this.Writes++
+        await super.WriteText(path, content)
+    }
+}
+
+test('RevokeAllFor with no matching sessions does not write the file', async () =>
+{
+    const storage = new CountingStorage()
+    const store = await FileSessionStore.Open(storage)
+    const a1 = await store.Issue(principal1)
+    const writesBefore = storage.Writes
+    await store.RevokeAllFor('nobody')
+    assert.equal(storage.Writes, writesBefore)
+    const reopened = await FileSessionStore.Open(storage)
+    assert.equal((await reopened.Validate(a1.Id))?.PrincipalId, 'p1')
+})

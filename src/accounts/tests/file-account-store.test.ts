@@ -130,3 +130,38 @@ test('Enable of an unknown principal or another tenant throws LocalAccountNotFou
     await assert.rejects(() => store.Enable(tenant1, 'nope'), LocalAccountNotFoundError)
     await assert.rejects(() => store.Enable(tenant2, 'p1'), LocalAccountNotFoundError)
 })
+
+class FailingWriteStorage extends FakeStorage
+{
+    public FailWrites = false
+
+    public override async WriteText(path: string, content: string): Promise<void>
+    {
+        if (this.FailWrites)
+        {
+            throw new Error('disk full')
+        }
+        await super.WriteText(path, content)
+    }
+}
+
+test('Enable restores the disabled flag when persist throws', async () =>
+{
+    const storage = new FailingWriteStorage()
+    const store = await FileAccountStore.Open(storage)
+    await store.CreateAccount(tenant1, 'a@x.io', 'p1', 'r1')
+    await store.Disable(tenant1, 'p1')
+    storage.FailWrites = true
+    await assert.rejects(() => store.Enable(tenant1, 'p1'), /disk full/)
+    assert.equal((await store.FindByPrincipalId(tenant1, 'p1'))?.Disabled, true)
+})
+
+test('Disable restores the disabled flag when persist throws', async () =>
+{
+    const storage = new FailingWriteStorage()
+    const store = await FileAccountStore.Open(storage)
+    await store.CreateAccount(tenant1, 'a@x.io', 'p1', 'r1')
+    storage.FailWrites = true
+    await assert.rejects(() => store.Disable(tenant1, 'p1'), /disk full/)
+    assert.equal((await store.FindByPrincipalId(tenant1, 'p1'))?.Disabled, false)
+})
