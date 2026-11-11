@@ -1,6 +1,6 @@
 import { DelegationDepth, ResourceAuthorizationPolicy } from '@pragmatic-tech-ai/todl-identity'
-import type { AuthMethod, IAccessPolicy, IAuthenticator, IIdentityProviderPack, ILocalAccountStore, IPrincipalDirectory, ISessionManager, IRoleGrantStore, IAuditSink, ISecretStore, IServiceTokenStore, IdentityStoreSet } from '@pragmatic-tech-ai/todl-identity'
-import { Argon2PasswordHasher, LocalAccountRegistrar, LocalPasswordAuthenticator, ServiceTokenAuthenticator } from '@pragmatic-tech-ai/todl-identity-local'
+import type { AuthMethod, IAccessPolicy, IAuthenticator, IIdentityProviderPack, ILocalAccountStore, IPrincipalDirectory, ISessionManager, IRoleGrantStore, IAuditSink, ISecretStore, IServiceTokenStore, IdentityStoreSet, IIdpDirectorySource, ISourceTokenProvider, ILocalGroupStore, IIdpDirectoryStore } from '@pragmatic-tech-ai/todl-identity'
+import { Argon2PasswordHasher, LocalAccountRegistrar, LocalDirectorySource, LocalPasswordAuthenticator, LocalSourceTokenProvider, ServiceTokenAuthenticator } from '@pragmatic-tech-ai/todl-identity-local'
 import type { IStorage } from '@pragmatic-tech-ai/todl-runtime'
 import { FileIdentityStores } from './file-identity-stores.js'
 
@@ -10,6 +10,8 @@ export interface ServerIdentityPackComposition
     ExtraAuthenticators?: readonly IAuthenticator[]
     DelegationDepth?: DelegationDepth
     Policy?: IAccessPolicy
+    DirectorySource?: IIdpDirectorySource
+    SourceTokens?: ISourceTokenProvider
 }
 
 /** Persistent single-tenant identity pack built over an injected store-set (file-backed by default). */
@@ -26,6 +28,10 @@ export class ServerIdentityPack implements IIdentityProviderPack
     public readonly Registrar: LocalAccountRegistrar
     public readonly Tokens: IServiceTokenStore
     public readonly Secrets: ISecretStore
+    public readonly Groups: ILocalGroupStore
+    public readonly IdpDirectory: IIdpDirectoryStore
+    public readonly DirectorySource: IIdpDirectorySource
+    public readonly SourceTokens: ISourceTokenProvider
 
     private constructor(stores: IdentityStoreSet, composition: ServerIdentityPackComposition)
     {
@@ -33,6 +39,10 @@ export class ServerIdentityPack implements IIdentityProviderPack
         this.Secrets = stores.Secrets
         this.Directory = stores.Accounts
         this.Accounts = stores.Accounts
+        this.Groups = stores.Accounts
+        this.IdpDirectory = stores.IdpDirectory
+        this.DirectorySource = composition.DirectorySource ?? new LocalDirectorySource(stores.Accounts, stores.Accounts)
+        this.SourceTokens = composition.SourceTokens ?? new LocalSourceTokenProvider(stores.Accounts, stores.Secrets)
         this.Tokens = stores.Tokens
         this.Sessions = stores.Sessions
         this.Grants = stores.Grants
