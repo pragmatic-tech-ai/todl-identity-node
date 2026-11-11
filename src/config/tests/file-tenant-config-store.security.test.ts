@@ -93,8 +93,10 @@ test('a null stored securityModel is invalid for that tenant only and does not c
 {
     const storage = new FakeStorage()
     const bad = { ...Fixture.LegacyRecord(), securityModel: null }
-    await new JsonFile(storage, 'tenant-config.json').Write({ configs: { bad, good: Fixture.LegacyRecord() } })
+    const badSettings = { ...Fixture.LegacyRecord(), providerSettings: 'oops' }
+    await new JsonFile(storage, 'tenant-config.json').Write({ configs: { bad, badSettings, good: Fixture.LegacyRecord() } })
     const store = await FileTenantConfigStore.Open(storage)
     await assert.rejects(store.Get('bad'), InvalidSecurityModelError)
+    await assert.rejects(store.Get('badSettings'), InvalidSecurityModelError)
     assert.equal((await store.Get('good'))?.SecurityModel?.teams.length, 1)
 })

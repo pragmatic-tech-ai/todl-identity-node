@@ -1,7 +1,8 @@
-import { DelegationDepth, NonAuthoritativeDirectorySource, ResourceAuthorizationPolicy } from '@pragmatic-tech-ai/todl-identity'
+import { DelegationDepth, ResourceAuthorizationPolicy } from '@pragmatic-tech-ai/todl-identity'
 import type { AuthMethod, IAccessPolicy, IAuthenticator, IIdentityProviderPack, ILocalAccountStore, IPrincipalDirectory, ISessionManager, IRoleGrantStore, IAuditSink, ISecretStore, IServiceTokenStore, IdentityStoreSet, IIdpDirectorySource, ISourceTokenProvider, ILocalGroupStore, IIdpDirectoryStore } from '@pragmatic-tech-ai/todl-identity'
 import { Argon2PasswordHasher, LocalAccountRegistrar, LocalDirectorySource, LocalPasswordAuthenticator, LocalSourceTokenProvider, ServiceTokenAuthenticator } from '@pragmatic-tech-ai/todl-identity-local'
 import type { IStorage } from '@pragmatic-tech-ai/todl-runtime'
+import { MixedDirectorySource } from '../directory/mixed-directory-source.js'
 import { FileIdentityStores } from './file-identity-stores.js'
 
 /** Optional per-pack composition: extra authenticators appended after token+local, delegation depth, and access policy. */
@@ -71,12 +72,12 @@ export class ServerIdentityPack implements IIdentityProviderPack
         return this.Authenticators.find(authenticator => authenticator.Method === method)
     }
 
-    /** The local-only pack is its own authority; with external authenticators and no connector the directory is non-authoritative. */
+    /** The local-only pack is its own authority; with external authenticators and no connector the directory is non-authoritative but still reports local account states. */
     private static DefaultDirectorySource(stores: IdentityStoreSet, composition: ServerIdentityPackComposition): IIdpDirectorySource
     {
         if ((composition.ExtraAuthenticators ?? []).length > 0)
         {
-            return new NonAuthoritativeDirectorySource()
+            return new MixedDirectorySource(stores.Accounts)
         }
         return new LocalDirectorySource(stores.Accounts, stores.Accounts)
     }

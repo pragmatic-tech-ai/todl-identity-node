@@ -1,5 +1,5 @@
-import { IdentityConfig, InvalidSecurityModelError, SecurityModelIssue, SecurityModelIssueCode, SecurityModelValidator } from '@pragmatic-tech-ai/todl-identity'
-import type { DelegationDepth, Role, ITenantConfigStore, ISecurityModelConfig } from '@pragmatic-tech-ai/todl-identity'
+import { DelegationDepth, IdentityConfig, InvalidSecurityModelError, SecurityModelIssue, SecurityModelIssueCode, SecurityModelValidator } from '@pragmatic-tech-ai/todl-identity'
+import type { Role, ITenantConfigStore, ISecurityModelConfig } from '@pragmatic-tech-ai/todl-identity'
 import type { IStorage } from '@pragmatic-tech-ai/todl-runtime'
 import { JsonFile } from '../storage/json-file.js'
 import { SecurityModelMigration } from './security-model-migration.js'
@@ -72,6 +72,11 @@ export class FileTenantConfigStore implements ITenantConfigStore
             invalid.set(tenantId, FileTenantConfigStore.Malformed(FileTenantConfigStore.RecordPath, FileTenantConfigStore.MalformedRecordMessage))
             return false
         }
+        if (!FileTenantConfigStore.HasWellFormedFields(record))
+        {
+            invalid.set(tenantId, FileTenantConfigStore.Malformed(FileTenantConfigStore.RecordPath, FileTenantConfigStore.MalformedRecordMessage))
+            return false
+        }
         if (record.securityModel === undefined)
         {
             return false
@@ -93,6 +98,21 @@ export class FileTenantConfigStore implements ITenantConfigStore
             invalid.set(tenantId, new InvalidSecurityModelError(issues))
         }
         return changed
+    }
+
+    private static HasWellFormedFields(record: ConfigRecord): boolean
+    {
+        return typeof record.packId === 'string'
+            && Object.values(DelegationDepth).includes(record.delegationDepth)
+            && FileTenantConfigStore.IsPairs(record.providerSettings, 'string')
+            && FileTenantConfigStore.IsPairs(record.groupRoleMap, 'number')
+            && FileTenantConfigStore.IsPairs(record.claimsMapping, 'string')
+    }
+
+    private static IsPairs(value: unknown, valueType: string): boolean
+    {
+        return Array.isArray(value)
+            && value.every(pair => Array.isArray(pair) && pair.length === 2 && typeof pair[0] === 'string' && typeof pair[1] === valueType)
     }
 
     private static Malformed(path: string, message: string): InvalidSecurityModelError
