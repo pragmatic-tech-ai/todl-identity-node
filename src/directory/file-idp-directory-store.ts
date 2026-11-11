@@ -1,5 +1,5 @@
-import { IdpDirectorySnapshot } from '@pragmatic-tech-ai/todl-identity'
-import type { IIdpDirectoryStore, IdpUserState } from '@pragmatic-tech-ai/todl-identity'
+import { IdpDirectorySnapshot, IdpUserState, UnreadableIdpDirectoryRecordError } from '@pragmatic-tech-ai/todl-identity'
+import type { IIdpDirectoryStore } from '@pragmatic-tech-ai/todl-identity'
 import type { IStorage } from '@pragmatic-tech-ai/todl-runtime'
 import { JsonFile } from '../storage/json-file.js'
 
@@ -16,10 +16,18 @@ interface DirectoryDocument
     tenants: Record<string, SnapshotRecord>
 }
 
-/** File-backed IdP directory snapshots, one per tenant: user states and group member ids only. */
+/** File-backed IdP directory snapshots, one per tenant: user states and group member ids only. A stored record that
+ *  does not parse (bad shape, unknown user state, invalid timestamp) fails closed: Get throws
+ *  UnreadableIdpDirectoryRecordError for that tenant instead of reading its users as Unknown (active); the next Save
+ *  replaces it. */
 export class FileIdpDirectoryStore implements IIdpDirectoryStore
 {
     private static readonly FileName = 'idp-directory.json'
+    private static readonly PairLength = 2
+    private static readonly ShapeReason = 'record shape is invalid'
+    private static readonly StateReason = 'unknown user state'
+    private static readonly TakenAtReason = 'invalid snapshot timestamp'
+    private static readonly States: ReadonlySet<string> = new Set<string>(Object.values(IdpUserState))
 
     private readonly file: JsonFile
     private readonly records: Map<string, SnapshotRecord>
@@ -44,7 +52,45 @@ export class FileIdpDirectoryStore implements IIdpDirectoryStore
         {
             return null
         }
-        return new IdpDirectorySnapshot(new Date(record.takenAt), record.authoritative, new Map(record.users), new Map(record.groups))
+        return FileIdpDirectoryStore.Parse(tenantId, record)
+    }
+
+    private static Parse(tenantId: string, record: SnapshotRecord): IdpDirectorySnapshot
+    {
+        if (typeof record !== 'object' || record === null || typeof record.authoritative !== 'boolean'
+            || typeof record.takenAt !== 'string' || !Array.isArray(record.users) || !Array.isArray(record.groups))
+        {
+            throw new UnreadableIdpDirectoryRecordError(tenantId, FileIdpDirectoryStore.ShapeReason)
+        }
+        const takenAt = new Date(record.takenAt)
+        if (Number.isNaN(takenAt.getTime()))
+        {
+            throw new UnreadableIdpDirectoryRecordError(tenantId, FileIdpDirectoryStore.TakenAtReason)
+        }
+        const users = new Map<string, IdpUserState>()
+        for (const entry of record.users as unknown[])
+        {
+            if (!Array.isArray(entry) || entry.length !== FileIdpDirectoryStore.PairLength || typeof entry[0] !== 'string')
+            {
+                throw new UnreadableIdpDirectoryRecordError(tenantId, FileIdpDirectoryStore.ShapeReason)
+            }
+            if (typeof entry[1] !== 'string' || !FileIdpDirectoryStore.States.has(entry[1]))
+            {
+                throw new UnreadableIdpDirectoryRecordError(tenantId, FileIdpDirectoryStore.StateReason)
+            }
+            users.set(entry[0], entry[1] as IdpUserState)
+        }
+        const groups = new Map<string, readonly string[]>()
+        for (const entry of record.groups as unknown[])
+        {
+            if (!Array.isArray(entry) || entry.length !== FileIdpDirectoryStore.PairLength || typeof entry[0] !== 'string'
+                || !Array.isArray(entry[1]) || (entry[1] as unknown[]).some(m => typeof m !== 'string'))
+            {
+                throw new UnreadableIdpDirectoryRecordError(tenantId, FileIdpDirectoryStore.ShapeReason)
+            }
+            groups.set(entry[0], entry[1] as string[])
+        }
+        return new IdpDirectorySnapshot(takenAt, record.authoritative, users, groups)
     }
 
     public async Save(tenantId: string, snapshot: IdpDirectorySnapshot): Promise<void>

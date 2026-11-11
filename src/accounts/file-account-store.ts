@@ -1,4 +1,4 @@
-import { LocalAccount, LocalAccountNotFoundError, LocalGroup, LocalGroupNotFoundError, Principal, PrincipalKind } from '@pragmatic-tech-ai/todl-identity'
+import { LocalAccount, LocalAccountNotFoundError, LocalGroup, LocalGroupNotFoundError, Principal, PrincipalKind, SystemPrincipal } from '@pragmatic-tech-ai/todl-identity'
 import type { ILocalAccountStore, ILocalGroupStore, IPrincipalDirectory, Tenant } from '@pragmatic-tech-ai/todl-identity'
 import type { IStorage } from '@pragmatic-tech-ai/todl-runtime'
 import { JsonFile } from '../storage/json-file.js'
@@ -37,6 +37,7 @@ export class FileAccountStore implements ILocalAccountStore, IPrincipalDirectory
     private static readonly DuplicateEmailMessage = 'email already registered'
     private static readonly DuplicatePrincipalMessage = 'principal already registered'
     private static readonly InvalidKeyComponentMessage = 'tenant id and principal id must not contain the key separator'
+    private static readonly ReservedPrincipalMessage = 'principal id uses the reserved system prefix'
     private static readonly DuplicateGroupMessage = 'group already exists'
     private static readonly KeySeparator = '/'
 
@@ -105,6 +106,10 @@ export class FileAccountStore implements ILocalAccountStore, IPrincipalDirectory
         if (tenant.Id.includes(FileAccountStore.KeySeparator) || principalId.includes(FileAccountStore.KeySeparator))
         {
             throw new Error(FileAccountStore.InvalidKeyComponentMessage)
+        }
+        if (SystemPrincipal.IsReserved(principalId))
+        {
+            throw new Error(FileAccountStore.ReservedPrincipalMessage)
         }
         const emailKey = FileAccountStore.Key(tenant.Id, email)
         const principalKey = FileAccountStore.Key(tenant.Id, principalId)

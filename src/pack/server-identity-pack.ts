@@ -1,4 +1,4 @@
-import { DelegationDepth, ResourceAuthorizationPolicy } from '@pragmatic-tech-ai/todl-identity'
+import { DelegationDepth, NonAuthoritativeDirectorySource, ResourceAuthorizationPolicy } from '@pragmatic-tech-ai/todl-identity'
 import type { AuthMethod, IAccessPolicy, IAuthenticator, IIdentityProviderPack, ILocalAccountStore, IPrincipalDirectory, ISessionManager, IRoleGrantStore, IAuditSink, ISecretStore, IServiceTokenStore, IdentityStoreSet, IIdpDirectorySource, ISourceTokenProvider, ILocalGroupStore, IIdpDirectoryStore } from '@pragmatic-tech-ai/todl-identity'
 import { Argon2PasswordHasher, LocalAccountRegistrar, LocalDirectorySource, LocalPasswordAuthenticator, LocalSourceTokenProvider, ServiceTokenAuthenticator } from '@pragmatic-tech-ai/todl-identity-local'
 import type { IStorage } from '@pragmatic-tech-ai/todl-runtime'
@@ -41,7 +41,7 @@ export class ServerIdentityPack implements IIdentityProviderPack
         this.Accounts = stores.Accounts
         this.Groups = stores.Accounts
         this.IdpDirectory = stores.IdpDirectory
-        this.DirectorySource = composition.DirectorySource ?? new LocalDirectorySource(stores.Accounts, stores.Accounts)
+        this.DirectorySource = composition.DirectorySource ?? ServerIdentityPack.DefaultDirectorySource(stores, composition)
         this.SourceTokens = composition.SourceTokens ?? new LocalSourceTokenProvider(stores.Accounts, stores.Secrets)
         this.Tokens = stores.Tokens
         this.Sessions = stores.Sessions
@@ -69,6 +69,16 @@ export class ServerIdentityPack implements IIdentityProviderPack
     public AuthenticatorFor(method: AuthMethod): IAuthenticator | undefined
     {
         return this.Authenticators.find(authenticator => authenticator.Method === method)
+    }
+
+    /** The local-only pack is its own authority; with external authenticators and no connector the directory is non-authoritative. */
+    private static DefaultDirectorySource(stores: IdentityStoreSet, composition: ServerIdentityPackComposition): IIdpDirectorySource
+    {
+        if ((composition.ExtraAuthenticators ?? []).length > 0)
+        {
+            return new NonAuthoritativeDirectorySource()
+        }
+        return new LocalDirectorySource(stores.Accounts, stores.Accounts)
     }
 
     private static Normalize(arg?: IAuthenticator | ServerIdentityPackComposition): ServerIdentityPackComposition

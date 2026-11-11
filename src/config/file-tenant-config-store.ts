@@ -24,6 +24,8 @@ export class FileTenantConfigStore implements ITenantConfigStore
     private static readonly FileName = 'tenant-config.json'
     private static readonly SecurityModelPath = 'securityModel'
     private static readonly NotAnObjectMessage = 'stored security model is not an object'
+    private static readonly RecordPath = ''
+    private static readonly MalformedRecordMessage = 'stored tenant config record is malformed'
 
     private readonly file: JsonFile
     private readonly configs: Map<string, ConfigRecord>
@@ -40,29 +42,19 @@ export class FileTenantConfigStore implements ITenantConfigStore
     {
         const file = new JsonFile(storage, FileTenantConfigStore.FileName)
         const document = await file.Read<ConfigDocument>({ configs: {} })
-        const configs = new Map(Object.entries(document.configs))
+        const configs = new Map(Object.entries(document.configs ?? {}))
         const invalid = new Map<string, InvalidSecurityModelError>()
         let changed = false
         for (const [tenantId, record] of configs)
         {
-            if (record.securityModel === undefined)
+            // One malformed record makes only its own tenant unreadable; every other tenant still opens.
+            try
             {
-                continue
+                changed = FileTenantConfigStore.Load(tenantId, record, invalid) || changed
             }
-            if (typeof record.securityModel !== 'object' || record.securityModel === null || Array.isArray(record.securityModel))
+            catch
             {
-                invalid.set(tenantId, new InvalidSecurityModelError([new SecurityModelIssue(SecurityModelIssueCode.UnknownSection, FileTenantConfigStore.SecurityModelPath, FileTenantConfigStore.NotAnObjectMessage)]))
-                continue
-            }
-            if (SecurityModelMigration.NeedsUpgrade(record.securityModel as unknown as Readonly<Record<string, unknown>>))
-            {
-                record.securityModel = SecurityModelMigration.Upgrade(record.securityModel as unknown as Readonly<Record<string, unknown>>)
-                changed = true
-            }
-            const issues = SecurityModelValidator.Validate(record.securityModel)
-            if (issues.length > 0)
-            {
-                invalid.set(tenantId, new InvalidSecurityModelError(issues))
+                invalid.set(tenantId, FileTenantConfigStore.Malformed(FileTenantConfigStore.RecordPath, FileTenantConfigStore.MalformedRecordMessage))
             }
         }
         if (changed)
@@ -70,6 +62,42 @@ export class FileTenantConfigStore implements ITenantConfigStore
             await file.Write({ configs: Object.fromEntries(configs) } satisfies ConfigDocument)
         }
         return new FileTenantConfigStore(file, configs, invalid)
+    }
+
+    // Returns true when the record's security model was upgraded in place.
+    private static Load(tenantId: string, record: ConfigRecord, invalid: Map<string, InvalidSecurityModelError>): boolean
+    {
+        if (typeof record !== 'object' || record === null || Array.isArray(record))
+        {
+            invalid.set(tenantId, FileTenantConfigStore.Malformed(FileTenantConfigStore.RecordPath, FileTenantConfigStore.MalformedRecordMessage))
+            return false
+        }
+        if (record.securityModel === undefined)
+        {
+            return false
+        }
+        if (typeof record.securityModel !== 'object' || record.securityModel === null || Array.isArray(record.securityModel))
+        {
+            invalid.set(tenantId, FileTenantConfigStore.Malformed(FileTenantConfigStore.SecurityModelPath, FileTenantConfigStore.NotAnObjectMessage))
+            return false
+        }
+        let changed = false
+        if (SecurityModelMigration.NeedsUpgrade(record.securityModel as unknown as Readonly<Record<string, unknown>>))
+        {
+            record.securityModel = SecurityModelMigration.Upgrade(record.securityModel as unknown as Readonly<Record<string, unknown>>)
+            changed = true
+        }
+        const issues = SecurityModelValidator.Validate(record.securityModel)
+        if (issues.length > 0)
+        {
+            invalid.set(tenantId, new InvalidSecurityModelError(issues))
+        }
+        return changed
+    }
+
+    private static Malformed(path: string, message: string): InvalidSecurityModelError
+    {
+        return new InvalidSecurityModelError([new SecurityModelIssue(SecurityModelIssueCode.MalformedSection, path, message)])
     }
 
     public async Get(tenantId: string): Promise<IdentityConfig | null>
