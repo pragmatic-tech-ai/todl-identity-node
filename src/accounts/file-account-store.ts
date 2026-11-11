@@ -50,7 +50,7 @@ export class FileAccountStore implements ILocalAccountStore, IPrincipalDirectory
         this.file = file
         for (const group of groups)
         {
-            this.GroupsFor(group.tenantId, true)!.set(group.groupId, group)
+            this.GroupsOrCreate(group.tenantId).set(group.groupId, group)
         }
         for (const record of records)
         {
@@ -216,7 +216,7 @@ export class FileAccountStore implements ILocalAccountStore, IPrincipalDirectory
 
     public async CreateGroup(tenant: Tenant, groupId: string, name: string): Promise<LocalGroup>
     {
-        const tenantGroups = this.GroupsFor(tenant.Id, true)!
+        const tenantGroups = this.GroupsOrCreate(tenant.Id)
         if (tenantGroups.has(groupId))
         {
             throw new Error(FileAccountStore.DuplicateGroupMessage)
@@ -229,7 +229,7 @@ export class FileAccountStore implements ILocalAccountStore, IPrincipalDirectory
     public async DeleteGroup(tenant: Tenant, groupId: string): Promise<void>
     {
         this.RequireGroup(tenant, groupId)
-        await this.Commit(this.GroupsFor(tenant.Id, false)!, groupId, undefined)
+        await this.Commit(this.GroupsOrCreate(tenant.Id), groupId, undefined)
     }
 
     public async AddMember(tenant: Tenant, groupId: string, principalId: string): Promise<void>
@@ -239,18 +239,18 @@ export class FileAccountStore implements ILocalAccountStore, IPrincipalDirectory
         {
             return
         }
-        await this.Commit(this.GroupsFor(tenant.Id, false)!, groupId, { ...group, memberIds: [...group.memberIds, principalId] })
+        await this.Commit(this.GroupsOrCreate(tenant.Id), groupId, { ...group, memberIds: [...group.memberIds, principalId] })
     }
 
     public async RemoveMember(tenant: Tenant, groupId: string, principalId: string): Promise<void>
     {
         const group = this.RequireGroup(tenant, groupId)
-        await this.Commit(this.GroupsFor(tenant.Id, false)!, groupId, { ...group, memberIds: group.memberIds.filter(id => id !== principalId) })
+        await this.Commit(this.GroupsOrCreate(tenant.Id), groupId, { ...group, memberIds: group.memberIds.filter(id => id !== principalId) })
     }
 
     public async ListGroups(tenant: Tenant): Promise<readonly LocalGroup[]>
     {
-        return [...(this.GroupsFor(tenant.Id, false)?.values() ?? [])].map(FileAccountStore.ToGroup)
+        return [...(this.FindGroups(tenant.Id)?.values() ?? [])].map(FileAccountStore.ToGroup)
     }
 
     /** Applies one group change (set, or delete when the record is undefined) and persists; restores the previous value if the write fails. */
@@ -283,7 +283,7 @@ export class FileAccountStore implements ILocalAccountStore, IPrincipalDirectory
 
     private RequireGroup(tenant: Tenant, groupId: string): GroupRecord
     {
-        const group = this.GroupsFor(tenant.Id, false)?.get(groupId)
+        const group = this.FindGroups(tenant.Id)?.get(groupId)
         if (group === undefined)
         {
             throw new LocalGroupNotFoundError(groupId)
@@ -291,10 +291,15 @@ export class FileAccountStore implements ILocalAccountStore, IPrincipalDirectory
         return group
     }
 
-    private GroupsFor(tenantId: string, create: boolean): Map<string, GroupRecord> | undefined
+    private FindGroups(tenantId: string): Map<string, GroupRecord> | undefined
+    {
+        return this.groups.get(tenantId)
+    }
+
+    private GroupsOrCreate(tenantId: string): Map<string, GroupRecord>
     {
         let tenantGroups = this.groups.get(tenantId)
-        if (tenantGroups === undefined && create)
+        if (tenantGroups === undefined)
         {
             tenantGroups = new Map<string, GroupRecord>()
             this.groups.set(tenantId, tenantGroups)

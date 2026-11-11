@@ -1,4 +1,4 @@
-import { IdentityConfig, InvalidSecurityModelError, SecurityModelValidator } from '@pragmatic-tech-ai/todl-identity'
+import { IdentityConfig, InvalidSecurityModelError, SecurityModelIssue, SecurityModelIssueCode, SecurityModelValidator } from '@pragmatic-tech-ai/todl-identity'
 import type { DelegationDepth, Role, ITenantConfigStore, ISecurityModelConfig } from '@pragmatic-tech-ai/todl-identity'
 import type { IStorage } from '@pragmatic-tech-ai/todl-runtime'
 import { JsonFile } from '../storage/json-file.js'
@@ -22,6 +22,8 @@ interface ConfigDocument
 export class FileTenantConfigStore implements ITenantConfigStore
 {
     private static readonly FileName = 'tenant-config.json'
+    private static readonly SecurityModelPath = 'securityModel'
+    private static readonly NotAnObjectMessage = 'stored security model is not an object'
 
     private readonly file: JsonFile
     private readonly configs: Map<string, ConfigRecord>
@@ -45,6 +47,11 @@ export class FileTenantConfigStore implements ITenantConfigStore
         {
             if (record.securityModel === undefined)
             {
+                continue
+            }
+            if (typeof record.securityModel !== 'object' || record.securityModel === null || Array.isArray(record.securityModel))
+            {
+                invalid.set(tenantId, new InvalidSecurityModelError([new SecurityModelIssue(SecurityModelIssueCode.UnknownSection, FileTenantConfigStore.SecurityModelPath, FileTenantConfigStore.NotAnObjectMessage)]))
                 continue
             }
             if (SecurityModelMigration.NeedsUpgrade(record.securityModel as unknown as Readonly<Record<string, unknown>>))

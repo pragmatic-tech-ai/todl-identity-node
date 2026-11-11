@@ -88,3 +88,13 @@ test('a legacy record is migrated on open and rewritten once', async () =>
     }
     assert.equal(SecurityModelMigration.NeedsUpgrade(raw.configs.t1.securityModel), false)
 })
+
+test('a null stored securityModel is invalid for that tenant only and does not crash Open', async () =>
+{
+    const storage = new FakeStorage()
+    const bad = { ...Fixture.LegacyRecord(), securityModel: null }
+    await new JsonFile(storage, 'tenant-config.json').Write({ configs: { bad, good: Fixture.LegacyRecord() } })
+    const store = await FileTenantConfigStore.Open(storage)
+    await assert.rejects(store.Get('bad'), InvalidSecurityModelError)
+    assert.equal((await store.Get('good'))?.SecurityModel?.teams.length, 1)
+})
