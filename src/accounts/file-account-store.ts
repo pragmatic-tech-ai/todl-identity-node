@@ -228,24 +228,24 @@ export class FileAccountStore implements ILocalAccountStore, IPrincipalDirectory
 
     public async DeleteGroup(tenant: Tenant, groupId: string): Promise<void>
     {
-        this.RequireGroup(tenant, groupId)
-        await this.Commit(this.GroupsOrCreate(tenant.Id), groupId, undefined)
+        const { tenantGroups } = this.RequireGroup(tenant, groupId)
+        await this.Commit(tenantGroups, groupId, undefined)
     }
 
     public async AddMember(tenant: Tenant, groupId: string, principalId: string): Promise<void>
     {
-        const group = this.RequireGroup(tenant, groupId)
+        const { tenantGroups, group } = this.RequireGroup(tenant, groupId)
         if (group.memberIds.includes(principalId))
         {
             return
         }
-        await this.Commit(this.GroupsOrCreate(tenant.Id), groupId, { ...group, memberIds: [...group.memberIds, principalId] })
+        await this.Commit(tenantGroups, groupId, { ...group, memberIds: [...group.memberIds, principalId] })
     }
 
     public async RemoveMember(tenant: Tenant, groupId: string, principalId: string): Promise<void>
     {
-        const group = this.RequireGroup(tenant, groupId)
-        await this.Commit(this.GroupsOrCreate(tenant.Id), groupId, { ...group, memberIds: group.memberIds.filter(id => id !== principalId) })
+        const { tenantGroups, group } = this.RequireGroup(tenant, groupId)
+        await this.Commit(tenantGroups, groupId, { ...group, memberIds: group.memberIds.filter(id => id !== principalId) })
     }
 
     public async ListGroups(tenant: Tenant): Promise<readonly LocalGroup[]>
@@ -281,14 +281,15 @@ export class FileAccountStore implements ILocalAccountStore, IPrincipalDirectory
         }
     }
 
-    private RequireGroup(tenant: Tenant, groupId: string): GroupRecord
+    private RequireGroup(tenant: Tenant, groupId: string): { tenantGroups: Map<string, GroupRecord>, group: GroupRecord }
     {
-        const group = this.FindGroups(tenant.Id)?.get(groupId)
-        if (group === undefined)
+        const tenantGroups = this.FindGroups(tenant.Id)
+        const group = tenantGroups?.get(groupId)
+        if (tenantGroups === undefined || group === undefined)
         {
             throw new LocalGroupNotFoundError(groupId)
         }
-        return group
+        return { tenantGroups, group }
     }
 
     private FindGroups(tenantId: string): Map<string, GroupRecord> | undefined
