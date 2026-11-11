@@ -5,6 +5,7 @@ import type { ISecurityModelConfig } from '@pragmatic-tech-ai/todl-identity'
 import { FakeStorage } from '@pragmatic-tech-ai/todl-runtime'
 import { FileTenantConfigStore } from '../file-tenant-config-store.js'
 import { JsonFile } from '../../storage/json-file.js'
+import { InvalidTenantConfigError } from '../invalid-tenant-config-error.js'
 import { SecurityModelMigration } from '../security-model-migration.js'
 
 class Fixture
@@ -94,9 +95,11 @@ test('a null stored securityModel is invalid for that tenant only and does not c
     const storage = new FakeStorage()
     const bad = { ...Fixture.LegacyRecord(), securityModel: null }
     const badSettings = { ...Fixture.LegacyRecord(), providerSettings: 'oops' }
-    await new JsonFile(storage, 'tenant-config.json').Write({ configs: { bad, badSettings, good: Fixture.LegacyRecord() } })
+    const badDepth = { ...Fixture.LegacyRecord(), delegationDepth: 'FullAuthz' }
+    await new JsonFile(storage, 'tenant-config.json').Write({ configs: { bad, badSettings, badDepth, good: Fixture.LegacyRecord() } })
     const store = await FileTenantConfigStore.Open(storage)
     await assert.rejects(store.Get('bad'), InvalidSecurityModelError)
-    await assert.rejects(store.Get('badSettings'), InvalidSecurityModelError)
+    await assert.rejects(store.Get('badSettings'), (e: unknown) => e instanceof InvalidTenantConfigError && e.TenantId === 'badSettings')
+    await assert.rejects(store.Get('badDepth'), InvalidTenantConfigError)
     assert.equal((await store.Get('good'))?.SecurityModel?.teams.length, 1)
 })

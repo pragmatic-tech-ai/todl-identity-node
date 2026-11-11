@@ -1,6 +1,7 @@
-import { DelegationDepth, IdentityConfig, InvalidSecurityModelError, SecurityModelIssue, SecurityModelIssueCode, SecurityModelValidator } from '@pragmatic-tech-ai/todl-identity'
-import type { Role, ITenantConfigStore, ISecurityModelConfig } from '@pragmatic-tech-ai/todl-identity'
+import { DelegationDepth, IdentityConfig, Role, InvalidSecurityModelError, SecurityModelIssue, SecurityModelIssueCode, SecurityModelValidator } from '@pragmatic-tech-ai/todl-identity'
+import type { ITenantConfigStore, ISecurityModelConfig } from '@pragmatic-tech-ai/todl-identity'
 import type { IStorage } from '@pragmatic-tech-ai/todl-runtime'
+import { InvalidTenantConfigError } from './invalid-tenant-config-error.js'
 import { JsonFile } from '../storage/json-file.js'
 import { SecurityModelMigration } from './security-model-migration.js'
 
@@ -24,14 +25,12 @@ export class FileTenantConfigStore implements ITenantConfigStore
     private static readonly FileName = 'tenant-config.json'
     private static readonly SecurityModelPath = 'securityModel'
     private static readonly NotAnObjectMessage = 'stored security model is not an object'
-    private static readonly RecordPath = ''
-    private static readonly MalformedRecordMessage = 'stored tenant config record is malformed'
 
     private readonly file: JsonFile
     private readonly configs: Map<string, ConfigRecord>
-    private readonly invalid: Map<string, InvalidSecurityModelError>
+    private readonly invalid: Map<string, Error>
 
-    private constructor(file: JsonFile, configs: Map<string, ConfigRecord>, invalid: Map<string, InvalidSecurityModelError>)
+    private constructor(file: JsonFile, configs: Map<string, ConfigRecord>, invalid: Map<string, Error>)
     {
         this.file = file
         this.configs = configs
@@ -43,7 +42,7 @@ export class FileTenantConfigStore implements ITenantConfigStore
         const file = new JsonFile(storage, FileTenantConfigStore.FileName)
         const document = await file.Read<ConfigDocument>({ configs: {} })
         const configs = new Map(Object.entries(document.configs ?? {}))
-        const invalid = new Map<string, InvalidSecurityModelError>()
+        const invalid = new Map<string, Error>()
         let changed = false
         for (const [tenantId, record] of configs)
         {
@@ -54,7 +53,7 @@ export class FileTenantConfigStore implements ITenantConfigStore
             }
             catch
             {
-                invalid.set(tenantId, FileTenantConfigStore.Malformed(FileTenantConfigStore.RecordPath, FileTenantConfigStore.MalformedRecordMessage))
+                invalid.set(tenantId, new InvalidTenantConfigError(tenantId))
             }
         }
         if (changed)
@@ -65,16 +64,16 @@ export class FileTenantConfigStore implements ITenantConfigStore
     }
 
     // Returns true when the record's security model was upgraded in place.
-    private static Load(tenantId: string, record: ConfigRecord, invalid: Map<string, InvalidSecurityModelError>): boolean
+    private static Load(tenantId: string, record: ConfigRecord, invalid: Map<string, Error>): boolean
     {
         if (typeof record !== 'object' || record === null || Array.isArray(record))
         {
-            invalid.set(tenantId, FileTenantConfigStore.Malformed(FileTenantConfigStore.RecordPath, FileTenantConfigStore.MalformedRecordMessage))
+            invalid.set(tenantId, new InvalidTenantConfigError(tenantId))
             return false
         }
         if (!FileTenantConfigStore.HasWellFormedFields(record))
         {
-            invalid.set(tenantId, FileTenantConfigStore.Malformed(FileTenantConfigStore.RecordPath, FileTenantConfigStore.MalformedRecordMessage))
+            invalid.set(tenantId, new InvalidTenantConfigError(tenantId))
             return false
         }
         if (record.securityModel === undefined)
@@ -103,16 +102,22 @@ export class FileTenantConfigStore implements ITenantConfigStore
     private static HasWellFormedFields(record: ConfigRecord): boolean
     {
         return typeof record.packId === 'string'
-            && Object.values(DelegationDepth).includes(record.delegationDepth)
-            && FileTenantConfigStore.IsPairs(record.providerSettings, 'string')
-            && FileTenantConfigStore.IsPairs(record.groupRoleMap, 'number')
-            && FileTenantConfigStore.IsPairs(record.claimsMapping, 'string')
+            && FileTenantConfigStore.IsEnumValue(DelegationDepth, record.delegationDepth)
+            && FileTenantConfigStore.IsPairs(record.providerSettings, v => typeof v === 'string')
+            && FileTenantConfigStore.IsPairs(record.groupRoleMap, v => FileTenantConfigStore.IsEnumValue(Role, v))
+            && FileTenantConfigStore.IsPairs(record.claimsMapping, v => typeof v === 'string')
     }
 
-    private static IsPairs(value: unknown, valueType: string): boolean
+    /** Numeric enums carry reverse name mappings, so a bare Object.values check would accept the member names. */
+    private static IsEnumValue(enumObject: Record<number, string>, value: unknown): boolean
+    {
+        return typeof value === 'number' && enumObject[value] !== undefined
+    }
+
+    private static IsPairs(value: unknown, isValue: (v: unknown) => boolean): boolean
     {
         return Array.isArray(value)
-            && value.every(pair => Array.isArray(pair) && pair.length === 2 && typeof pair[0] === 'string' && typeof pair[1] === valueType)
+            && value.every(pair => Array.isArray(pair) && pair.length === 2 && typeof pair[0] === 'string' && isValue(pair[1]))
     }
 
     private static Malformed(path: string, message: string): InvalidSecurityModelError
