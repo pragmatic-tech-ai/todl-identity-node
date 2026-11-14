@@ -4,7 +4,7 @@ import { IdpDirectorySnapshot, IdpUserState } from '@pragmatic-tech-ai/todl-iden
 import { FakeStorage } from '@pragmatic-tech-ai/todl-runtime'
 import { FileIdpDirectoryStore } from '../file-idp-directory-store.js'
 
-test('file directory store round-trips states and members per tenant, survives reopen, unknown tenant is null', async () =>
+test('file directory store round-trips states and members per realm, survives reopen, unknown realm is null', async () =>
 {
     const storage = new FakeStorage()
     const store = await FileIdpDirectoryStore.Open(storage)

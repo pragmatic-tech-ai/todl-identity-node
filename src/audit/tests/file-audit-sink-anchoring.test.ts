@@ -12,9 +12,9 @@ class AnchoringTestHarness
     private static readonly AnchorsFile = 'audit-anchors.json'
     private static readonly Key = 'test-key'
 
-    public static Event(tenant: string, action: string): AuditEvent
+    public static Event(realm: string, action: string): AuditEvent
     {
-        return new AuditEvent(AuditEventKind.AdminAction, tenant, 'p1', new Date('2026-01-01T00:00:00Z'), new Map([['action', action]]))
+        return new AuditEvent(AuditEventKind.AdminAction, realm, 'p1', new Date('2026-01-01T00:00:00Z'), new Map([['action', action]]))
     }
 
     public static async Anchoring(storage: FakeStorage, interval = 1): Promise<AuditAnchoring>
@@ -71,7 +71,7 @@ test('tail-truncation of the event log is detected on reopen', async () =>
     await assert.rejects(FileAuditSink.Open(storage, await AnchoringTestHarness.Anchoring(storage)), AuditAnchorMismatch)
 })
 
-test('deleting all of a tenant’s events is detected (truncate-to-zero)', async () =>
+test('deleting all of a realm’s events is detected (truncate-to-zero)', async () =>
 {
     const storage = new FakeStorage()
     const sink = await FileAuditSink.Open(storage, await AnchoringTestHarness.Anchoring(storage))
@@ -82,14 +82,14 @@ test('deleting all of a tenant’s events is detected (truncate-to-zero)', async
     await assert.rejects(FileAuditSink.Open(storage, await AnchoringTestHarness.Anchoring(storage)), AuditAnchorMismatch)
 })
 
-test('one tenant fully wiped while another survives is detected via the store-tenant union', async () =>
+test('one realm fully wiped while another survives is detected via the store-realm union', async () =>
 {
     const storage = new FakeStorage()
     const sink = await FileAuditSink.Open(storage, await AnchoringTestHarness.Anchoring(storage))
     await sink.Record(AnchoringTestHarness.Event('t1', 'a'))
     await sink.Record(AnchoringTestHarness.Event('t2', 'x'))
     const doc = await AnchoringTestHarness.ReadDoc(storage)
-    doc.events = doc.events.filter(e => e.tenantId !== 't1')
+    doc.events = doc.events.filter(e => e.realmId !== 't1')
     await AnchoringTestHarness.WriteDoc(storage, doc)
     await assert.rejects(FileAuditSink.Open(storage, await AnchoringTestHarness.Anchoring(storage)), AuditAnchorMismatch)
 })

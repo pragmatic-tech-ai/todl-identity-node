@@ -54,9 +54,9 @@ class AuditDocFixtures
         await storage.WriteText(AuditDocFixtures.FileName, JSON.stringify(doc))
     }
 
-    public static Raw(tenantId: string, action: string): Record<string, unknown>
+    public static Raw(realmId: string, action: string): Record<string, unknown>
     {
-        return { kind: AuditEventKind.AdminAction, tenantId, principalId: 'p1', at: '2026-01-01T00:00:00.000Z', detail: [['action', action]] }
+        return { kind: AuditEventKind.AdminAction, realmId, principalId: 'p1', at: '2026-01-01T00:00:00.000Z', detail: [['action', action]] }
     }
 
     public static Event(action: string): AuditEvent
@@ -148,7 +148,7 @@ test('legacy file without hashes is backfilled then verifies clean', async () =>
     assert.equal(second.Records('t1')[1].Hash, first.Records('t1')[1].Hash)
 })
 
-test('a hashless record after a hashed one for the same tenant throws', async () =>
+test('a hashless record after a hashed one for the same realm throws', async () =>
 {
     const storage = new FakeStorage()
     const sink = await FileAuditSink.Open(storage)
@@ -159,7 +159,7 @@ test('a hashless record after a hashed one for the same tenant throws', async ()
     await assert.rejects(FileAuditSink.Open(storage), AuditTamperDetected)
 })
 
-test('interleaved tenants each verify with correct per-tenant sequence', async () =>
+test('interleaved realms each verify with correct per-realm sequence', async () =>
 {
     const storage = new FakeStorage()
     const sink = await FileAuditSink.Open(storage)
@@ -201,7 +201,7 @@ test('a failed write leaves events and chain untouched and later Records succeed
     assert.ok(sink.Verify('t1'))
 })
 
-test('raw interleaved legacy events backfill per tenant', async () =>
+test('raw interleaved legacy events backfill per realm', async () =>
 {
     const storage = new FakeStorage()
     await AuditDocFixtures.WriteDoc(storage, { events: [AuditDocFixtures.Raw('t1', 'a'), AuditDocFixtures.Raw('t2', 'x'), AuditDocFixtures.Raw('t1', 'b'), AuditDocFixtures.Raw('t2', 'y')] })
@@ -215,7 +215,7 @@ test('raw interleaved legacy events backfill per tenant', async () =>
     assert.ok(reopened.Verify('t2'))
 })
 
-test('a hashed tenant does not block another tenant legacy backfill', async () =>
+test('a hashed realm does not block another realm legacy backfill', async () =>
 {
     const storage = new FakeStorage()
     const sink = await FileAuditSink.Open(storage)

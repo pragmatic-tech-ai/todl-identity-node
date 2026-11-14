@@ -16,7 +16,7 @@ test('appends persist to a separate file and survive a reopen; Latest is the hig
     assert.equal((await reopened.Latest('t1'))!.Sequence, 2)
     assert.equal((await reopened.Latest('t1'))!.HeadHash, 'h2')
     assert.equal(await reopened.Latest('absent'), undefined)
-    assert.deepEqual([...(await reopened.Tenants())].sort(), ['t1', 't2'])
+    assert.deepEqual([...(await reopened.Realms())].sort(), ['t1', 't2'])
 })
 
 test('concurrent appends are serialized and both persist across a reopen', async () =>
@@ -26,6 +26,6 @@ test('concurrent appends are serialized and both persist across a reopen', async
     await Promise.all([store.Append(new AuditCheckpoint('t1', 1, 'h1', 'a1', 's1')), store.Append(new AuditCheckpoint('t1', 2, 'h2', 'a2', 's2'))])
     const reopened = await FileAuditCheckpointStore.Open(storage)
     assert.equal((await reopened.Latest('t1'))!.Sequence, 2)
-    const tenants = await reopened.Tenants()
-    assert.equal(tenants.length, 1)
+    const realms = await reopened.Realms()
+    assert.equal(realms.length, 1)
 })

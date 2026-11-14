@@ -1,12 +1,13 @@
 import { LocalAccount, LocalAccountNotFoundError, LocalGroup, LocalGroupNotFoundError, Principal, PrincipalKind, SystemPrincipal } from '@pragmatic-tech-ai/todl-identity'
-import type { ILocalAccountStore, ILocalGroupStore, IPrincipalDirectory, Tenant } from '@pragmatic-tech-ai/todl-identity'
+import type { ILocalAccountStore, ILocalGroupStore, IPrincipalDirectory, Realm } from '@pragmatic-tech-ai/todl-identity'
 import type { IStorage } from '@pragmatic-tech-ai/todl-runtime'
 import { JsonFile } from '../storage/json-file.js'
+import { LegacyRealmNames } from '../storage/legacy-realm-names.js'
 
 interface AccountRecord
 {
     principalId: string
-    tenantId: string
+    realmId: string
     email: string
     secretRef: string
     disabled?: boolean
@@ -20,7 +21,7 @@ interface LegacyAccountRecord extends AccountRecord
 interface GroupRecord
 {
     groupId: string
-    tenantId: string
+    realmId: string
     name: string
     memberIds: string[]
 }
@@ -36,7 +37,7 @@ export class FileAccountStore implements ILocalAccountStore, IPrincipalDirectory
     private static readonly FileName = 'accounts.json'
     private static readonly DuplicateEmailMessage = 'email already registered'
     private static readonly DuplicatePrincipalMessage = 'principal already registered'
-    private static readonly InvalidKeyComponentMessage = 'tenant id and principal id must not contain the key separator'
+    private static readonly InvalidKeyComponentMessage = 'realm id and principal id must not contain the key separator'
     private static readonly ReservedPrincipalMessage = 'principal id uses the reserved system prefix'
     private static readonly DuplicateGroupMessage = 'group already exists'
     private static readonly KeySeparator = '/'
@@ -51,12 +52,12 @@ export class FileAccountStore implements ILocalAccountStore, IPrincipalDirectory
         this.file = file
         for (const group of groups)
         {
-            this.GroupsOrCreate(group.tenantId).set(group.groupId, group)
+            this.GroupsOrCreate(group.realmId).set(group.groupId, group)
         }
         for (const record of records)
         {
-            this.byEmail.set(FileAccountStore.Key(record.tenantId, record.email), record)
-            this.byPrincipal.set(FileAccountStore.Key(record.tenantId, record.principalId), record)
+            this.byEmail.set(FileAccountStore.Key(record.realmId, record.email), record)
+            this.byPrincipal.set(FileAccountStore.Key(record.realmId, record.principalId), record)
         }
     }
 
@@ -64,6 +65,8 @@ export class FileAccountStore implements ILocalAccountStore, IPrincipalDirectory
     {
         const file = new JsonFile(storage, FileAccountStore.FileName)
         const document = await file.Read<{ accounts: LegacyAccountRecord[], groups?: GroupRecord[] }>({ accounts: [] })
+        LegacyRealmNames.UpgradeAll(document.accounts, LegacyRealmNames.LegacyRealmId, LegacyRealmNames.RealmId)
+        LegacyRealmNames.UpgradeAll(document.groups, LegacyRealmNames.LegacyRealmId, LegacyRealmNames.RealmId)
         const groups = (document.groups ?? []).map(group => ({ ...group, memberIds: [...group.memberIds] }))
         let migrated = false
         const accounts: AccountRecord[] = []
@@ -89,10 +92,10 @@ export class FileAccountStore implements ILocalAccountStore, IPrincipalDirectory
 
     private static JoinLegacyGroup(groups: GroupRecord[], account: AccountRecord, groupId: string): void
     {
-        let group = groups.find(g => g.tenantId === account.tenantId && g.groupId === groupId)
+        let group = groups.find(g => g.realmId === account.realmId && g.groupId === groupId)
         if (group === undefined)
         {
-            group = { groupId, tenantId: account.tenantId, name: groupId, memberIds: [] }
+            group = { groupId, realmId: account.realmId, name: groupId, memberIds: [] }
             groups.push(group)
         }
         if (!group.memberIds.includes(account.principalId))
@@ -101,9 +104,9 @@ export class FileAccountStore implements ILocalAccountStore, IPrincipalDirectory
         }
     }
 
-    public async CreateAccount(tenant: Tenant, email: string, principalId: string, secretRef: string): Promise<LocalAccount>
+    public async CreateAccount(realm: Realm, email: string, principalId: string, secretRef: string): Promise<LocalAccount>
     {
-        if (tenant.Id.includes(FileAccountStore.KeySeparator) || principalId.includes(FileAccountStore.KeySeparator))
+        if (realm.Id.includes(FileAccountStore.KeySeparator) || principalId.includes(FileAccountStore.KeySeparator))
         {
             throw new Error(FileAccountStore.InvalidKeyComponentMessage)
         }
@@ -111,8 +114,8 @@ export class FileAccountStore implements ILocalAccountStore, IPrincipalDirectory
         {
             throw new Error(FileAccountStore.ReservedPrincipalMessage)
         }
-        const emailKey = FileAccountStore.Key(tenant.Id, email)
-        const principalKey = FileAccountStore.Key(tenant.Id, principalId)
+        const emailKey = FileAccountStore.Key(realm.Id, email)
+        const principalKey = FileAccountStore.Key(realm.Id, principalId)
         if (this.byEmail.has(emailKey))
         {
             throw new Error(FileAccountStore.DuplicateEmailMessage)
@@ -121,7 +124,7 @@ export class FileAccountStore implements ILocalAccountStore, IPrincipalDirectory
         {
             throw new Error(FileAccountStore.DuplicatePrincipalMessage)
         }
-        const record: AccountRecord = { principalId, tenantId: tenant.Id, email, secretRef, disabled: false }
+        const record: AccountRecord = { principalId, realmId: realm.Id, email, secretRef, disabled: false }
         this.byEmail.set(emailKey, record)
         this.byPrincipal.set(principalKey, record)
         try
@@ -134,12 +137,12 @@ export class FileAccountStore implements ILocalAccountStore, IPrincipalDirectory
             this.byPrincipal.delete(principalKey)
             throw error
         }
-        return new LocalAccount(principalId, tenant.Id, email, secretRef, false)
+        return new LocalAccount(principalId, realm.Id, email, secretRef, false)
     }
 
-    public async Disable(tenant: Tenant, principalId: string): Promise<void>
+    public async Disable(realm: Realm, principalId: string): Promise<void>
     {
-        const record = this.byPrincipal.get(FileAccountStore.Key(tenant.Id, principalId))
+        const record = this.byPrincipal.get(FileAccountStore.Key(realm.Id, principalId))
         if (record === undefined)
         {
             throw new LocalAccountNotFoundError(principalId)
@@ -157,9 +160,9 @@ export class FileAccountStore implements ILocalAccountStore, IPrincipalDirectory
         }
     }
 
-    public async Enable(tenant: Tenant, principalId: string): Promise<void>
+    public async Enable(realm: Realm, principalId: string): Promise<void>
     {
-        const record = this.byPrincipal.get(FileAccountStore.Key(tenant.Id, principalId))
+        const record = this.byPrincipal.get(FileAccountStore.Key(realm.Id, principalId))
         if (record === undefined)
         {
             throw new LocalAccountNotFoundError(principalId)
@@ -177,12 +180,12 @@ export class FileAccountStore implements ILocalAccountStore, IPrincipalDirectory
         }
     }
 
-    public async ListAccounts(tenant: Tenant): Promise<readonly LocalAccount[]>
+    public async ListAccounts(realm: Realm): Promise<readonly LocalAccount[]>
     {
         const accounts: LocalAccount[] = []
         for (const record of this.byPrincipal.values())
         {
-            if (record.tenantId === tenant.Id)
+            if (record.realmId === realm.Id)
             {
                 accounts.push(FileAccountStore.Map(record))
             }
@@ -190,24 +193,24 @@ export class FileAccountStore implements ILocalAccountStore, IPrincipalDirectory
         return accounts
     }
 
-    public async FindByEmail(tenant: Tenant, email: string): Promise<LocalAccount | null>
+    public async FindByEmail(realm: Realm, email: string): Promise<LocalAccount | null>
     {
-        return FileAccountStore.ToAccount(this.byEmail.get(FileAccountStore.Key(tenant.Id, email)))
+        return FileAccountStore.ToAccount(this.byEmail.get(FileAccountStore.Key(realm.Id, email)))
     }
 
-    public async FindByPrincipalId(tenant: Tenant, principalId: string): Promise<LocalAccount | null>
+    public async FindByPrincipalId(realm: Realm, principalId: string): Promise<LocalAccount | null>
     {
-        return FileAccountStore.ToAccount(this.byPrincipal.get(FileAccountStore.Key(tenant.Id, principalId)))
+        return FileAccountStore.ToAccount(this.byPrincipal.get(FileAccountStore.Key(realm.Id, principalId)))
     }
 
-    public async Lookup(principalId: string, tenant: Tenant): Promise<Principal | null>
+    public async Lookup(principalId: string, realm: Realm): Promise<Principal | null>
     {
-        const record = this.byPrincipal.get(FileAccountStore.Key(tenant.Id, principalId))
+        const record = this.byPrincipal.get(FileAccountStore.Key(realm.Id, principalId))
         if (record === undefined || record.disabled === true)
         {
             return null
         }
-        return new Principal(principalId, tenant.Id, PrincipalKind.User, new Map(), this.GroupIdsOf(tenant.Id, principalId))
+        return new Principal(principalId, realm.Id, PrincipalKind.User, new Map(), this.GroupIdsOf(realm.Id, principalId))
     }
 
     public async GroupsOf(principal: Principal): Promise<readonly string[]>
@@ -216,119 +219,119 @@ export class FileAccountStore implements ILocalAccountStore, IPrincipalDirectory
         {
             return principal.Groups
         }
-        return this.GroupIdsOf(principal.TenantId, principal.Id)
+        return this.GroupIdsOf(principal.RealmId, principal.Id)
     }
 
-    public async CreateGroup(tenant: Tenant, groupId: string, name: string): Promise<LocalGroup>
+    public async CreateGroup(realm: Realm, groupId: string, name: string): Promise<LocalGroup>
     {
-        const tenantGroups = this.GroupsOrCreate(tenant.Id)
-        if (tenantGroups.has(groupId))
+        const realmGroups = this.GroupsOrCreate(realm.Id)
+        if (realmGroups.has(groupId))
         {
             throw new Error(FileAccountStore.DuplicateGroupMessage)
         }
-        const record: GroupRecord = { groupId, tenantId: tenant.Id, name, memberIds: [] }
-        await this.Commit(tenantGroups, groupId, record)
+        const record: GroupRecord = { groupId, realmId: realm.Id, name, memberIds: [] }
+        await this.Commit(realmGroups, groupId, record)
         return FileAccountStore.ToGroup(record)
     }
 
-    public async DeleteGroup(tenant: Tenant, groupId: string): Promise<void>
+    public async DeleteGroup(realm: Realm, groupId: string): Promise<void>
     {
-        const { tenantGroups } = this.RequireGroup(tenant, groupId)
-        await this.Commit(tenantGroups, groupId, undefined)
+        const { realmGroups } = this.RequireGroup(realm, groupId)
+        await this.Commit(realmGroups, groupId, undefined)
     }
 
-    public async AddMember(tenant: Tenant, groupId: string, principalId: string): Promise<void>
+    public async AddMember(realm: Realm, groupId: string, principalId: string): Promise<void>
     {
-        const { tenantGroups, group } = this.RequireGroup(tenant, groupId)
+        const { realmGroups, group } = this.RequireGroup(realm, groupId)
         if (group.memberIds.includes(principalId))
         {
             return
         }
-        await this.Commit(tenantGroups, groupId, { ...group, memberIds: [...group.memberIds, principalId] })
+        await this.Commit(realmGroups, groupId, { ...group, memberIds: [...group.memberIds, principalId] })
     }
 
-    public async RemoveMember(tenant: Tenant, groupId: string, principalId: string): Promise<void>
+    public async RemoveMember(realm: Realm, groupId: string, principalId: string): Promise<void>
     {
-        const { tenantGroups, group } = this.RequireGroup(tenant, groupId)
-        await this.Commit(tenantGroups, groupId, { ...group, memberIds: group.memberIds.filter(id => id !== principalId) })
+        const { realmGroups, group } = this.RequireGroup(realm, groupId)
+        await this.Commit(realmGroups, groupId, { ...group, memberIds: group.memberIds.filter(id => id !== principalId) })
     }
 
-    public async ListGroups(tenant: Tenant): Promise<readonly LocalGroup[]>
+    public async ListGroups(realm: Realm): Promise<readonly LocalGroup[]>
     {
-        return [...(this.FindGroups(tenant.Id)?.values() ?? [])].map(FileAccountStore.ToGroup)
+        return [...(this.FindGroups(realm.Id)?.values() ?? [])].map(FileAccountStore.ToGroup)
     }
 
     /** Applies one group change (set, or delete when the record is undefined) and persists; restores the previous value if the write fails. */
-    private async Commit(tenantGroups: Map<string, GroupRecord>, groupId: string, record: GroupRecord | undefined): Promise<void>
+    private async Commit(realmGroups: Map<string, GroupRecord>, groupId: string, record: GroupRecord | undefined): Promise<void>
     {
-        const previous = tenantGroups.get(groupId)
-        FileAccountStore.Apply(tenantGroups, groupId, record)
+        const previous = realmGroups.get(groupId)
+        FileAccountStore.Apply(realmGroups, groupId, record)
         try
         {
             await this.persist()
         }
         catch (error)
         {
-            FileAccountStore.Apply(tenantGroups, groupId, previous)
+            FileAccountStore.Apply(realmGroups, groupId, previous)
             throw error
         }
     }
 
-    private static Apply(tenantGroups: Map<string, GroupRecord>, groupId: string, record: GroupRecord | undefined): void
+    private static Apply(realmGroups: Map<string, GroupRecord>, groupId: string, record: GroupRecord | undefined): void
     {
         if (record === undefined)
         {
-            tenantGroups.delete(groupId)
+            realmGroups.delete(groupId)
         }
         else
         {
-            tenantGroups.set(groupId, record)
+            realmGroups.set(groupId, record)
         }
     }
 
-    private RequireGroup(tenant: Tenant, groupId: string): { tenantGroups: Map<string, GroupRecord>, group: GroupRecord }
+    private RequireGroup(realm: Realm, groupId: string): { realmGroups: Map<string, GroupRecord>, group: GroupRecord }
     {
-        const tenantGroups = this.FindGroups(tenant.Id)
-        const group = tenantGroups?.get(groupId)
-        if (tenantGroups === undefined || group === undefined)
+        const realmGroups = this.FindGroups(realm.Id)
+        const group = realmGroups?.get(groupId)
+        if (realmGroups === undefined || group === undefined)
         {
             throw new LocalGroupNotFoundError(groupId)
         }
-        return { tenantGroups, group }
+        return { realmGroups, group }
     }
 
-    private FindGroups(tenantId: string): Map<string, GroupRecord> | undefined
+    private FindGroups(realmId: string): Map<string, GroupRecord> | undefined
     {
-        return this.groups.get(tenantId)
+        return this.groups.get(realmId)
     }
 
-    private GroupsOrCreate(tenantId: string): Map<string, GroupRecord>
+    private GroupsOrCreate(realmId: string): Map<string, GroupRecord>
     {
-        let tenantGroups = this.groups.get(tenantId)
-        if (tenantGroups === undefined)
+        let realmGroups = this.groups.get(realmId)
+        if (realmGroups === undefined)
         {
-            tenantGroups = new Map<string, GroupRecord>()
-            this.groups.set(tenantId, tenantGroups)
+            realmGroups = new Map<string, GroupRecord>()
+            this.groups.set(realmId, realmGroups)
         }
-        return tenantGroups
+        return realmGroups
     }
 
-    private GroupIdsOf(tenantId: string, principalId: string): string[]
+    private GroupIdsOf(realmId: string, principalId: string): string[]
     {
-        return [...(this.groups.get(tenantId)?.values() ?? [])]
+        return [...(this.groups.get(realmId)?.values() ?? [])]
             .filter(group => group.memberIds.includes(principalId))
             .map(group => group.groupId)
     }
 
     private static ToGroup(record: GroupRecord): LocalGroup
     {
-        return new LocalGroup(record.groupId, record.tenantId, record.name, [...record.memberIds])
+        return new LocalGroup(record.groupId, record.realmId, record.name, [...record.memberIds])
     }
 
     private persist(): Promise<void>
     {
         const accounts = [...this.byPrincipal.values()]
-        const groups = [...this.groups.values()].flatMap(tenantGroups => [...tenantGroups.values()])
+        const groups = [...this.groups.values()].flatMap(realmGroups => [...realmGroups.values()])
         return this.file.Write({ accounts, groups } satisfies AccountDocument)
     }
 
@@ -343,11 +346,11 @@ export class FileAccountStore implements ILocalAccountStore, IPrincipalDirectory
 
     private static Map(record: AccountRecord): LocalAccount
     {
-        return new LocalAccount(record.principalId, record.tenantId, record.email, record.secretRef, record.disabled === true)
+        return new LocalAccount(record.principalId, record.realmId, record.email, record.secretRef, record.disabled === true)
     }
 
-    private static Key(tenantId: string, id: string): string
+    private static Key(realmId: string, id: string): string
     {
-        return tenantId + FileAccountStore.KeySeparator + id
+        return realmId + FileAccountStore.KeySeparator + id
     }
 }

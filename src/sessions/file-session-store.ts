@@ -1,13 +1,14 @@
 import { randomBytes, createHash } from 'node:crypto'
 import { Session, AuthMethod } from '@pragmatic-tech-ai/todl-identity'
-import type { ISessionManager, Principal, Tenant } from '@pragmatic-tech-ai/todl-identity'
+import type { ISessionManager, Principal, Realm } from '@pragmatic-tech-ai/todl-identity'
 import type { IStorage } from '@pragmatic-tech-ai/todl-runtime'
 import { JsonFile } from '../storage/json-file.js'
+import { LegacyRealmNames } from '../storage/legacy-realm-names.js'
 
 interface SessionRecord
 {
     principalId: string
-    tenantId: string
+    realmId: string
     issuedAt: string
     expiresAt: string
 }
@@ -43,6 +44,7 @@ export class FileSessionStore implements ISessionManager
     {
         const file = new JsonFile(storage, FileSessionStore.FileName)
         const document = await file.Read<SessionDocument>({ sessions: {} })
+        LegacyRealmNames.UpgradeValues(document.sessions, LegacyRealmNames.LegacyRealmId, LegacyRealmNames.RealmId)
         return new FileSessionStore(file, new Map(Object.entries(document.sessions)), ttlMs, now)
     }
 
@@ -51,9 +53,9 @@ export class FileSessionStore implements ISessionManager
         const token = randomBytes(FileSessionStore.TokenBytes).toString(FileSessionStore.TokenEncoding)
         const issuedAt = this.now()
         const expiresAt = new Date(issuedAt.getTime() + this.ttlMs)
-        this.sessions.set(this.hash(token), { principalId: principal.Id, tenantId: principal.TenantId, issuedAt: issuedAt.toISOString(), expiresAt: expiresAt.toISOString() })
+        this.sessions.set(this.hash(token), { principalId: principal.Id, realmId: principal.RealmId, issuedAt: issuedAt.toISOString(), expiresAt: expiresAt.toISOString() })
         await this.persist()
-        return new Session(token, principal.Id, principal.TenantId, issuedAt, expiresAt, AuthMethod.Local)
+        return new Session(token, principal.Id, principal.RealmId, issuedAt, expiresAt, AuthMethod.Local)
     }
 
     public async Validate(token: string): Promise<Session | null>
@@ -64,7 +66,7 @@ export class FileSessionStore implements ISessionManager
         {
             return null
         }
-        const session = new Session(token, record.principalId, record.tenantId, new Date(record.issuedAt), new Date(record.expiresAt), AuthMethod.Local)
+        const session = new Session(token, record.principalId, record.realmId, new Date(record.issuedAt), new Date(record.expiresAt), AuthMethod.Local)
         if (session.IsExpired(this.now()))
         {
             this.sessions.delete(key)
@@ -82,12 +84,12 @@ export class FileSessionStore implements ISessionManager
         }
     }
 
-    public async RevokeAllFor(tenant: Tenant, principalId: string): Promise<void>
+    public async RevokeAllFor(realm: Realm, principalId: string): Promise<void>
     {
         let removed = false
         for (const [key, record] of [...this.sessions.entries()])
         {
-            if (record.principalId === principalId && record.tenantId === tenant.Id)
+            if (record.principalId === principalId && record.realmId === realm.Id)
             {
                 this.sessions.delete(key)
                 removed = true

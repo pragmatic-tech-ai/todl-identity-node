@@ -1,12 +1,12 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
-import { AuthMethod, DelegationDepth, Tenant, TenantKind, PresentedSecret, Credential, AuthenticatedResult } from '@pragmatic-tech-ai/todl-identity'
+import { AuthMethod, DelegationDepth, Realm, RealmKind, PresentedSecret, Credential, AuthenticatedResult } from '@pragmatic-tech-ai/todl-identity'
 import { FakeStorage } from '@pragmatic-tech-ai/todl-runtime'
 import { ServerIdentityPack } from '../server-identity-pack.js'
 import { FileIdentityStores } from '../file-identity-stores.js'
 
-const tenant1 = new Tenant('t1', TenantKind.SelfHosted, 'Tenant One')
+const realm1 = new Realm('t1', RealmKind.SelfHosted, 'Realm One')
 
 test('Open assembles a FullAuthz pack with local + service-token authenticators', async () =>
 {
@@ -21,9 +21,9 @@ test('a registered account authenticates by local password through the pack', as
 {
     const storage = new FakeStorage()
     const pack = await ServerIdentityPack.Open(storage, randomBytes(32))
-    await pack.Registrar.Register(tenant1, 'a@x.io', 'p1', new PresentedSecret('pw-123456'))
+    await pack.Registrar.Register(realm1, 'a@x.io', 'p1', new PresentedSecret('pw-123456'))
     const authenticator = pack.AuthenticatorFor(AuthMethod.Local)!
-    const result = await authenticator.Authenticate(new Credential(AuthMethod.Local, 'a@x.io'), new PresentedSecret('pw-123456'), tenant1)
+    const result = await authenticator.Authenticate(new Credential(AuthMethod.Local, 'a@x.io'), new PresentedSecret('pw-123456'), realm1)
     assert.ok(result instanceof AuthenticatedResult)
     assert.equal((result as AuthenticatedResult).Principal.Id, 'p1')
 })
@@ -40,9 +40,9 @@ test('registered accounts and their password hashes persist across reopen', asyn
     const storage = new FakeStorage()
     const key = randomBytes(32)
     const first = await ServerIdentityPack.Open(storage, key)
-    await first.Registrar.Register(tenant1, 'a@x.io', 'p1', new PresentedSecret('pw-123456'))
+    await first.Registrar.Register(realm1, 'a@x.io', 'p1', new PresentedSecret('pw-123456'))
     const second = await ServerIdentityPack.Open(storage, Buffer.from(key))
-    const result = await second.AuthenticatorFor(AuthMethod.Local)!.Authenticate(new Credential(AuthMethod.Local, 'a@x.io'), new PresentedSecret('pw-123456'), tenant1)
+    const result = await second.AuthenticatorFor(AuthMethod.Local)!.Authenticate(new Credential(AuthMethod.Local, 'a@x.io'), new PresentedSecret('pw-123456'), realm1)
     assert.ok(result instanceof AuthenticatedResult)
 })
 
@@ -64,5 +64,5 @@ test('Accounts is the same object as Directory and supports ListAccounts', async
 {
     const pack = await ServerIdentityPack.Open(new FakeStorage(), randomBytes(32))
     assert.equal(pack.Accounts, pack.Directory)
-    assert.deepEqual(await pack.Accounts.ListAccounts(new Tenant('t1', TenantKind.SelfHosted, 'T')), [])
+    assert.deepEqual(await pack.Accounts.ListAccounts(new Realm('t1', RealmKind.SelfHosted, 'T')), [])
 })

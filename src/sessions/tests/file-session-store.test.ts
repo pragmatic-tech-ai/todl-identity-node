@@ -1,11 +1,11 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { Principal, PrincipalKind, AuthMethod, Tenant, TenantKind } from '@pragmatic-tech-ai/todl-identity'
+import { Principal, PrincipalKind, AuthMethod, Realm, RealmKind } from '@pragmatic-tech-ai/todl-identity'
 import { FakeStorage } from '@pragmatic-tech-ai/todl-runtime'
 import { FileSessionStore } from '../file-session-store.js'
 
 const principal1 = new Principal('p1', 't1', PrincipalKind.User, new Map(), [])
-const tenant1 = new Tenant('t1', TenantKind.Saas, 'Acme')
+const realm1 = new Realm('t1', RealmKind.Saas, 'Acme')
 const SessionsFile = 'sessions.json'
 
 test('Issue returns a session whose Id is the bearer token; Validate accepts it', async () =>
@@ -63,12 +63,12 @@ test('RevokeAllFor removes every session of that principal only, and persists', 
     const a1 = await store.Issue(principal1)
     const a2 = await store.Issue(principal1)
     const b1 = await store.Issue(principalB)
-    const otherTenant = await store.Issue(new Principal('p1', 't2', PrincipalKind.User, new Map(), []))
-    await store.RevokeAllFor(tenant1, 'p1')
+    const otherRealm = await store.Issue(new Principal('p1', 't2', PrincipalKind.User, new Map(), []))
+    await store.RevokeAllFor(realm1, 'p1')
     assert.equal(await store.Validate(a1.Id), null)
     assert.equal(await store.Validate(a2.Id), null)
     assert.equal((await store.Validate(b1.Id))?.PrincipalId, 'p2')
-    assert.equal((await store.Validate(otherTenant.Id))?.TenantId, 't2')
+    assert.equal((await store.Validate(otherRealm.Id))?.RealmId, 't2')
     const reopened = await FileSessionStore.Open(storage)
     assert.equal(await reopened.Validate(a1.Id), null)
     assert.equal((await reopened.Validate(b1.Id))?.PrincipalId, 'p2')
@@ -91,7 +91,7 @@ test('RevokeAllFor with no matching sessions does not write the file', async () 
     const store = await FileSessionStore.Open(storage)
     const a1 = await store.Issue(principal1)
     const writesBefore = storage.Writes
-    await store.RevokeAllFor(tenant1, 'nobody')
+    await store.RevokeAllFor(realm1, 'nobody')
     assert.equal(storage.Writes, writesBefore)
     const reopened = await FileSessionStore.Open(storage)
     assert.equal((await reopened.Validate(a1.Id))?.PrincipalId, 'p1')

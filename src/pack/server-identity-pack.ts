@@ -15,7 +15,7 @@ export interface ServerIdentityPackComposition
     SourceTokens?: ISourceTokenProvider
 }
 
-/** Persistent single-tenant identity pack built over an injected store-set (file-backed by default). */
+/** Persistent single-realm identity pack built over an injected store-set (file-backed by default). */
 export class ServerIdentityPack implements IIdentityProviderPack
 {
     public readonly DelegationDepth: DelegationDepth

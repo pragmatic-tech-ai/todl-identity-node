@@ -1,14 +1,15 @@
 import { Grant, Role, ResourceRef, ResourceKind } from '@pragmatic-tech-ai/todl-identity'
-import type { IRoleGrantStore, Tenant } from '@pragmatic-tech-ai/todl-identity'
+import type { IRoleGrantStore, Realm } from '@pragmatic-tech-ai/todl-identity'
 import type { IStorage } from '@pragmatic-tech-ai/todl-runtime'
 import { JsonFile } from '../storage/json-file.js'
+import { LegacyRealmNames } from '../storage/legacy-realm-names.js'
 
 interface GrantRecord
 {
     subject: string
     role: Role
     resourceKind: ResourceKind
-    resourceTenantId: string
+    resourceRealmId: string
     resourcePath: string[]
 }
 
@@ -34,10 +35,11 @@ export class FileRoleGrantStore implements IRoleGrantStore
     {
         const file = new JsonFile(storage, FileRoleGrantStore.FileName)
         const document = await file.Read<GrantDocument>({ grants: [] })
+        LegacyRealmNames.UpgradeAll(document.grants, LegacyRealmNames.LegacyResourceRealmId, LegacyRealmNames.ResourceRealmId)
         return new FileRoleGrantStore(file, document.grants)
     }
 
-    public async GrantsFor(subject: string, _tenant: Tenant): Promise<readonly Grant[]>
+    public async GrantsFor(subject: string, _realm: Realm): Promise<readonly Grant[]>
     {
         return this.grants.filter(record => record.subject === subject).map(FileRoleGrantStore.ToGrant)
     }
@@ -49,7 +51,7 @@ export class FileRoleGrantStore implements IRoleGrantStore
 
     public async Save(grant: Grant): Promise<void>
     {
-        this.grants.push({ subject: grant.Subject, role: grant.Role, resourceKind: grant.Resource.Kind, resourceTenantId: grant.Resource.TenantId, resourcePath: [...grant.Resource.Path] })
+        this.grants.push({ subject: grant.Subject, role: grant.Role, resourceKind: grant.Resource.Kind, resourceRealmId: grant.Resource.RealmId, resourcePath: [...grant.Resource.Path] })
         await this.file.Write({ grants: this.grants } satisfies GrantDocument)
     }
 
@@ -63,16 +65,16 @@ export class FileRoleGrantStore implements IRoleGrantStore
 
     private static Matches(record: GrantRecord, grant: Grant): boolean
     {
-        return record.subject === grant.Subject && record.role === grant.Role && record.resourceKind === grant.Resource.Kind && record.resourceTenantId === grant.Resource.TenantId && record.resourcePath.length === grant.Resource.Path.length && record.resourcePath.every((p, i) => p === grant.Resource.Path[i])
+        return record.subject === grant.Subject && record.role === grant.Role && record.resourceKind === grant.Resource.Kind && record.resourceRealmId === grant.Resource.RealmId && record.resourcePath.length === grant.Resource.Path.length && record.resourcePath.every((p, i) => p === grant.Resource.Path[i])
     }
 
     private static IsOn(record: GrantRecord, resource: ResourceRef): boolean
     {
-        return record.resourceKind === resource.Kind && record.resourceTenantId === resource.TenantId && record.resourcePath.length === resource.Path.length && record.resourcePath.every((p, i) => p === resource.Path[i])
+        return record.resourceKind === resource.Kind && record.resourceRealmId === resource.RealmId && record.resourcePath.length === resource.Path.length && record.resourcePath.every((p, i) => p === resource.Path[i])
     }
 
     private static ToGrant(record: GrantRecord): Grant
     {
-        return new Grant(record.subject, record.role, new ResourceRef(record.resourceKind, record.resourceTenantId, [...record.resourcePath]))
+        return new Grant(record.subject, record.role, new ResourceRef(record.resourceKind, record.resourceRealmId, [...record.resourcePath]))
     }
 }

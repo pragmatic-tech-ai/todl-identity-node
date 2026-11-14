@@ -1,5 +1,5 @@
 import { IdpDirectorySnapshot, IdpUserState } from '@pragmatic-tech-ai/todl-identity'
-import type { IdpDirectoryRequest, IIdpDirectorySource, ILocalAccountStore, Tenant } from '@pragmatic-tech-ai/todl-identity'
+import type { IdpDirectoryRequest, IIdpDirectorySource, ILocalAccountStore, Realm } from '@pragmatic-tech-ai/todl-identity'
 
 /**
  * Directory source for a pack that mixes external authenticators with local accounts and has no connector.
@@ -17,12 +17,12 @@ export class MixedDirectorySource implements IIdpDirectorySource
     {
     }
 
-    public async Snapshot(tenant: Tenant, request: IdpDirectoryRequest): Promise<IdpDirectorySnapshot>
+    public async Snapshot(realm: Realm, request: IdpDirectoryRequest): Promise<IdpDirectorySnapshot>
     {
         const users = new Map<string, IdpUserState>()
         for (const principalId of request.PrincipalIds)
         {
-            const account = await this.accounts.FindByPrincipalId(tenant, principalId)
+            const account = await this.accounts.FindByPrincipalId(realm, principalId)
             if (account !== null)
             {
                 users.set(principalId, account.Disabled ? IdpUserState.Disabled : IdpUserState.Enabled)

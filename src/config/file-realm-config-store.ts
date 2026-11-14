@@ -1,8 +1,9 @@
 import { DelegationDepth, IdentityConfig, Role, InvalidSecurityModelError, SecurityModelIssue, SecurityModelIssueCode, SecurityModelValidator } from '@pragmatic-tech-ai/todl-identity'
-import type { ITenantConfigStore, ISecurityModelConfig } from '@pragmatic-tech-ai/todl-identity'
+import type { IRealmConfigStore, ISecurityModelConfig } from '@pragmatic-tech-ai/todl-identity'
 import type { IStorage } from '@pragmatic-tech-ai/todl-runtime'
-import { InvalidTenantConfigError } from './invalid-tenant-config-error.js'
+import { InvalidRealmConfigError } from './invalid-realm-config-error.js'
 import { JsonFile } from '../storage/json-file.js'
+import { LegacyRealmNames } from '../storage/legacy-realm-names.js'
 import { SecurityModelMigration } from './security-model-migration.js'
 
 interface ConfigRecord
@@ -20,60 +21,78 @@ interface ConfigDocument
     configs: Record<string, ConfigRecord>
 }
 
-export class FileTenantConfigStore implements ITenantConfigStore
+export class FileRealmConfigStore implements IRealmConfigStore
 {
-    private static readonly FileName = 'tenant-config.json'
     private static readonly SecurityModelPath = 'securityModel'
     private static readonly NotAnObjectMessage = 'stored security model is not an object'
 
     private readonly file: JsonFile
     private readonly configs: Map<string, ConfigRecord>
     private readonly invalid: Map<string, Error>
+    /** Set while the configs still come from the legacy `tenant-config.json`; the first write removes that file. */
+    private legacy: IStorage | undefined
 
-    private constructor(file: JsonFile, configs: Map<string, ConfigRecord>, invalid: Map<string, Error>)
+    private constructor(file: JsonFile, configs: Map<string, ConfigRecord>, invalid: Map<string, Error>, legacy: IStorage | undefined)
     {
         this.file = file
         this.configs = configs
         this.invalid = invalid
+        this.legacy = legacy
     }
 
-    public static async Open(storage: IStorage): Promise<FileTenantConfigStore>
+    /** Reads `realm-config.json`; only when it does not exist yet, the legacy `tenant-config.json` (one release). */
+    public static async Open(storage: IStorage): Promise<FileRealmConfigStore>
     {
-        const file = new JsonFile(storage, FileTenantConfigStore.FileName)
-        const document = await file.Read<ConfigDocument>({ configs: {} })
+        const L = LegacyRealmNames
+        const file = new JsonFile(storage, L.ConfigFile)
+        const legacy = !await storage.Exists(L.ConfigFile) && await storage.Exists(L.LegacyConfigFile) ? storage : undefined
+        const source = legacy === undefined ? file : new JsonFile(storage, L.LegacyConfigFile)
+        const document = await source.Read<ConfigDocument>({ configs: {} })
         const configs = new Map(Object.entries(document.configs ?? {}))
         const invalid = new Map<string, Error>()
         let changed = false
-        for (const [tenantId, record] of configs)
+        for (const [realmId, record] of configs)
         {
-            // One malformed record makes only its own tenant unreadable; every other tenant still opens.
+            // One malformed record makes only its own realm unreadable; every other realm still opens.
             try
             {
-                changed = FileTenantConfigStore.Load(tenantId, record, invalid) || changed
+                changed = FileRealmConfigStore.Load(realmId, record, invalid) || changed
             }
             catch
             {
-                invalid.set(tenantId, new InvalidTenantConfigError(tenantId))
+                invalid.set(realmId, new InvalidRealmConfigError(realmId))
             }
         }
+        const store = new FileRealmConfigStore(file, configs, invalid, legacy)
         if (changed)
         {
-            await file.Write({ configs: Object.fromEntries(configs) } satisfies ConfigDocument)
+            await store.WriteDocument()
         }
-        return new FileTenantConfigStore(file, configs, invalid)
+        return store
+    }
+
+    /** Writes every config to `realm-config.json`; the first write after a legacy read also removes `tenant-config.json`. */
+    private async WriteDocument(): Promise<void>
+    {
+        await this.file.Write({ configs: Object.fromEntries(this.configs) } satisfies ConfigDocument)
+        if (this.legacy !== undefined)
+        {
+            await this.legacy.Delete(LegacyRealmNames.LegacyConfigFile)
+            this.legacy = undefined
+        }
     }
 
     // Returns true when the record's security model was upgraded in place.
-    private static Load(tenantId: string, record: ConfigRecord, invalid: Map<string, Error>): boolean
+    private static Load(realmId: string, record: ConfigRecord, invalid: Map<string, Error>): boolean
     {
         if (typeof record !== 'object' || record === null || Array.isArray(record))
         {
-            invalid.set(tenantId, new InvalidTenantConfigError(tenantId))
+            invalid.set(realmId, new InvalidRealmConfigError(realmId))
             return false
         }
-        if (!FileTenantConfigStore.HasWellFormedFields(record))
+        if (!FileRealmConfigStore.HasWellFormedFields(record))
         {
-            invalid.set(tenantId, new InvalidTenantConfigError(tenantId))
+            invalid.set(realmId, new InvalidRealmConfigError(realmId))
             return false
         }
         if (record.securityModel === undefined)
@@ -82,7 +101,7 @@ export class FileTenantConfigStore implements ITenantConfigStore
         }
         if (typeof record.securityModel !== 'object' || record.securityModel === null || Array.isArray(record.securityModel))
         {
-            invalid.set(tenantId, FileTenantConfigStore.Malformed(FileTenantConfigStore.SecurityModelPath, FileTenantConfigStore.NotAnObjectMessage))
+            invalid.set(realmId, FileRealmConfigStore.Malformed(FileRealmConfigStore.SecurityModelPath, FileRealmConfigStore.NotAnObjectMessage))
             return false
         }
         let changed = false
@@ -94,7 +113,7 @@ export class FileTenantConfigStore implements ITenantConfigStore
         const issues = SecurityModelValidator.Validate(record.securityModel)
         if (issues.length > 0)
         {
-            invalid.set(tenantId, new InvalidSecurityModelError(issues))
+            invalid.set(realmId, new InvalidSecurityModelError(issues))
         }
         return changed
     }
@@ -102,10 +121,10 @@ export class FileTenantConfigStore implements ITenantConfigStore
     private static HasWellFormedFields(record: ConfigRecord): boolean
     {
         return typeof record.packId === 'string'
-            && FileTenantConfigStore.IsEnumValue(DelegationDepth, record.delegationDepth)
-            && FileTenantConfigStore.IsPairs(record.providerSettings, v => typeof v === 'string')
-            && FileTenantConfigStore.IsPairs(record.groupRoleMap, v => FileTenantConfigStore.IsEnumValue(Role, v))
-            && FileTenantConfigStore.IsPairs(record.claimsMapping, v => typeof v === 'string')
+            && FileRealmConfigStore.IsEnumValue(DelegationDepth, record.delegationDepth)
+            && FileRealmConfigStore.IsPairs(record.providerSettings, v => typeof v === 'string')
+            && FileRealmConfigStore.IsPairs(record.groupRoleMap, v => FileRealmConfigStore.IsEnumValue(Role, v))
+            && FileRealmConfigStore.IsPairs(record.claimsMapping, v => typeof v === 'string')
     }
 
     /** Numeric enums carry reverse name mappings, so a bare Object.values check would accept the member names. */
@@ -125,14 +144,14 @@ export class FileTenantConfigStore implements ITenantConfigStore
         return new InvalidSecurityModelError([new SecurityModelIssue(SecurityModelIssueCode.MalformedSection, path, message)])
     }
 
-    public async Get(tenantId: string): Promise<IdentityConfig | null>
+    public async Get(realmId: string): Promise<IdentityConfig | null>
     {
-        const record = this.configs.get(tenantId)
+        const record = this.configs.get(realmId)
         if (record === undefined)
         {
             return null
         }
-        const error = this.invalid.get(tenantId)
+        const error = this.invalid.get(realmId)
         if (error !== undefined)
         {
             throw error
@@ -140,31 +159,31 @@ export class FileTenantConfigStore implements ITenantConfigStore
         return new IdentityConfig(record.packId, record.delegationDepth, new Map(record.providerSettings), new Map(record.groupRoleMap), new Map(record.claimsMapping), record.securityModel)
     }
 
-    public async Save(tenantId: string, config: IdentityConfig): Promise<void>
+    public async Save(realmId: string, config: IdentityConfig): Promise<void>
     {
         if (config.SecurityModel !== undefined)
         {
             SecurityModelValidator.AssertValid(config.SecurityModel)
         }
-        const previous = this.configs.get(tenantId)
-        this.configs.set(tenantId, { packId: config.PackId, delegationDepth: config.DelegationDepth, providerSettings: [...config.ProviderSettings], groupRoleMap: [...config.GroupRoleMap], claimsMapping: [...config.ClaimsMapping], securityModel: config.SecurityModel })
+        const previous = this.configs.get(realmId)
+        this.configs.set(realmId, { packId: config.PackId, delegationDepth: config.DelegationDepth, providerSettings: [...config.ProviderSettings], groupRoleMap: [...config.GroupRoleMap], claimsMapping: [...config.ClaimsMapping], securityModel: config.SecurityModel })
         try
         {
-            await this.file.Write({ configs: Object.fromEntries(this.configs) } satisfies ConfigDocument)
+            await this.WriteDocument()
         }
         catch (error)
         {
             if (previous === undefined)
             {
-                this.configs.delete(tenantId)
+                this.configs.delete(realmId)
             }
             else
             {
-                this.configs.set(tenantId, previous)
+                this.configs.set(realmId, previous)
             }
             throw error
         }
-        this.invalid.delete(tenantId)
+        this.invalid.delete(realmId)
     }
 
     public async List(): Promise<readonly string[]>

@@ -2,10 +2,11 @@ import { AuditCheckpoint } from '@pragmatic-tech-ai/todl-identity-host'
 import type { IAuditCheckpointStore } from '@pragmatic-tech-ai/todl-identity-host'
 import type { IStorage } from '@pragmatic-tech-ai/todl-runtime'
 import { JsonFile } from '../storage/json-file.js'
+import { LegacyRealmNames } from '../storage/legacy-realm-names.js'
 
 interface CheckpointRecord
 {
-    tenantId: string
+    realmId: string
     sequence: number
     headHash: string
     at: string
@@ -39,22 +40,23 @@ export class FileAuditCheckpointStore implements IAuditCheckpointStore
     {
         const file = new JsonFile(storage, FileAuditCheckpointStore.FileName)
         const document = await file.Read<AnchorDocument>({ checkpoints: [] })
+        LegacyRealmNames.UpgradeAll(document.checkpoints, LegacyRealmNames.LegacyRealmId, LegacyRealmNames.RealmId)
         return new FileAuditCheckpointStore(file, [...document.checkpoints])
     }
 
-    public Latest(tenantId: string): Promise<AuditCheckpoint | undefined>
+    public Latest(realmId: string): Promise<AuditCheckpoint | undefined>
     {
         let best: CheckpointRecord | undefined
         for (const record of this.checkpoints)
         {
-            if (record.tenantId === tenantId && (best === undefined || record.sequence > best.sequence))
+            if (record.realmId === realmId && (best === undefined || record.sequence > best.sequence))
             {
                 best = record
             }
         }
         return Promise.resolve(best === undefined
             ? undefined
-            : new AuditCheckpoint(best.tenantId, best.sequence, best.headHash, best.at, best.signature))
+            : new AuditCheckpoint(best.realmId, best.sequence, best.headHash, best.at, best.signature))
     }
 
     public Append(checkpoint: AuditCheckpoint): Promise<void>
@@ -66,13 +68,13 @@ export class FileAuditCheckpointStore implements IAuditCheckpointStore
 
     private async Commit(checkpoint: AuditCheckpoint): Promise<void>
     {
-        const record: CheckpointRecord = { tenantId: checkpoint.TenantId, sequence: checkpoint.Sequence, headHash: checkpoint.HeadHash, at: checkpoint.At, signature: checkpoint.Signature }
+        const record: CheckpointRecord = { realmId: checkpoint.RealmId, sequence: checkpoint.Sequence, headHash: checkpoint.HeadHash, at: checkpoint.At, signature: checkpoint.Signature }
         await this.file.Write({ checkpoints: [...this.checkpoints, record] } satisfies AnchorDocument)
         this.checkpoints.push(record)
     }
 
-    public Tenants(): Promise<readonly string[]>
+    public Realms(): Promise<readonly string[]>
     {
-        return Promise.resolve([...new Set(this.checkpoints.map(r => r.tenantId))])
+        return Promise.resolve([...new Set(this.checkpoints.map(r => r.realmId))])
     }
 }

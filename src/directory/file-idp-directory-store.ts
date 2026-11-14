@@ -2,6 +2,7 @@ import { IdpDirectorySnapshot, IdpUserState, UnreadableIdpDirectoryRecordError }
 import type { IIdpDirectoryStore } from '@pragmatic-tech-ai/todl-identity'
 import type { IStorage } from '@pragmatic-tech-ai/todl-runtime'
 import { JsonFile } from '../storage/json-file.js'
+import { LegacyRealmNames } from '../storage/legacy-realm-names.js'
 
 interface SnapshotRecord
 {
@@ -13,12 +14,12 @@ interface SnapshotRecord
 
 interface DirectoryDocument
 {
-    tenants: Record<string, SnapshotRecord>
+    realms: Record<string, SnapshotRecord>
 }
 
-/** File-backed IdP directory snapshots, one per tenant: user states and group member ids only. A stored record that
+/** File-backed IdP directory snapshots, one per realm: user states and group member ids only. A stored record that
  *  does not parse (bad shape, unknown user state, invalid timestamp) fails closed: Get throws
- *  UnreadableIdpDirectoryRecordError for that tenant instead of reading its users as Unknown (active); the next Save
+ *  UnreadableIdpDirectoryRecordError for that realm instead of reading its users as Unknown (active); the next Save
  *  replaces it. */
 export class FileIdpDirectoryStore implements IIdpDirectoryStore
 {
@@ -41,42 +42,43 @@ export class FileIdpDirectoryStore implements IIdpDirectoryStore
     public static async Open(storage: IStorage): Promise<FileIdpDirectoryStore>
     {
         const file = new JsonFile(storage, FileIdpDirectoryStore.FileName)
-        const document = await file.Read<DirectoryDocument>({ tenants: {} })
-        return new FileIdpDirectoryStore(file, new Map(Object.entries(document.tenants ?? {})))
+        const document = await file.Read<DirectoryDocument>({ realms: {} })
+        LegacyRealmNames.Upgrade(document, LegacyRealmNames.LegacyRealms, LegacyRealmNames.Realms)
+        return new FileIdpDirectoryStore(file, new Map(Object.entries(document.realms ?? {})))
     }
 
-    public async Get(tenantId: string): Promise<IdpDirectorySnapshot | null>
+    public async Get(realmId: string): Promise<IdpDirectorySnapshot | null>
     {
-        const record = this.records.get(tenantId)
+        const record = this.records.get(realmId)
         if (record === undefined)
         {
             return null
         }
-        return FileIdpDirectoryStore.Parse(tenantId, record)
+        return FileIdpDirectoryStore.Parse(realmId, record)
     }
 
-    private static Parse(tenantId: string, record: SnapshotRecord): IdpDirectorySnapshot
+    private static Parse(realmId: string, record: SnapshotRecord): IdpDirectorySnapshot
     {
         if (typeof record !== 'object' || record === null || typeof record.authoritative !== 'boolean'
             || typeof record.takenAt !== 'string' || !Array.isArray(record.users) || !Array.isArray(record.groups))
         {
-            throw new UnreadableIdpDirectoryRecordError(tenantId, FileIdpDirectoryStore.ShapeReason)
+            throw new UnreadableIdpDirectoryRecordError(realmId, FileIdpDirectoryStore.ShapeReason)
         }
         const takenAt = new Date(record.takenAt)
         if (Number.isNaN(takenAt.getTime()))
         {
-            throw new UnreadableIdpDirectoryRecordError(tenantId, FileIdpDirectoryStore.TakenAtReason)
+            throw new UnreadableIdpDirectoryRecordError(realmId, FileIdpDirectoryStore.TakenAtReason)
         }
         const users = new Map<string, IdpUserState>()
         for (const entry of record.users as unknown[])
         {
             if (!Array.isArray(entry) || entry.length !== FileIdpDirectoryStore.PairLength || typeof entry[0] !== 'string')
             {
-                throw new UnreadableIdpDirectoryRecordError(tenantId, FileIdpDirectoryStore.ShapeReason)
+                throw new UnreadableIdpDirectoryRecordError(realmId, FileIdpDirectoryStore.ShapeReason)
             }
             if (typeof entry[1] !== 'string' || !FileIdpDirectoryStore.States.has(entry[1]))
             {
-                throw new UnreadableIdpDirectoryRecordError(tenantId, FileIdpDirectoryStore.StateReason)
+                throw new UnreadableIdpDirectoryRecordError(realmId, FileIdpDirectoryStore.StateReason)
             }
             users.set(entry[0], entry[1] as IdpUserState)
         }
@@ -86,17 +88,17 @@ export class FileIdpDirectoryStore implements IIdpDirectoryStore
             if (!Array.isArray(entry) || entry.length !== FileIdpDirectoryStore.PairLength || typeof entry[0] !== 'string'
                 || !Array.isArray(entry[1]) || (entry[1] as unknown[]).some(m => typeof m !== 'string'))
             {
-                throw new UnreadableIdpDirectoryRecordError(tenantId, FileIdpDirectoryStore.ShapeReason)
+                throw new UnreadableIdpDirectoryRecordError(realmId, FileIdpDirectoryStore.ShapeReason)
             }
             groups.set(entry[0], entry[1] as string[])
         }
         return new IdpDirectorySnapshot(takenAt, record.authoritative, users, groups)
     }
 
-    public async Save(tenantId: string, snapshot: IdpDirectorySnapshot): Promise<void>
+    public async Save(realmId: string, snapshot: IdpDirectorySnapshot): Promise<void>
     {
-        const previous = this.records.get(tenantId)
-        this.records.set(tenantId, {
+        const previous = this.records.get(realmId)
+        this.records.set(realmId, {
             takenAt: snapshot.TakenAt.toISOString(),
             authoritative: snapshot.Authoritative,
             users: [...snapshot.Users()],
@@ -104,17 +106,17 @@ export class FileIdpDirectoryStore implements IIdpDirectoryStore
         })
         try
         {
-            await this.file.Write({ tenants: Object.fromEntries(this.records) } satisfies DirectoryDocument)
+            await this.file.Write({ realms: Object.fromEntries(this.records) } satisfies DirectoryDocument)
         }
         catch (error)
         {
             if (previous === undefined)
             {
-                this.records.delete(tenantId)
+                this.records.delete(realmId)
             }
             else
             {
-                this.records.set(tenantId, previous)
+                this.records.set(realmId, previous)
             }
             throw error
         }

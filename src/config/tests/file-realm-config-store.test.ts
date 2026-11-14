@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { IdentityConfig, DelegationDepth, Role } from '@pragmatic-tech-ai/todl-identity'
 import { FakeStorage } from '@pragmatic-tech-ai/todl-runtime'
-import { FileTenantConfigStore } from '../file-tenant-config-store.js'
+import { FileRealmConfigStore } from '../file-realm-config-store.js'
 
 const config = new IdentityConfig(
     'server-pack',
@@ -13,7 +13,7 @@ const config = new IdentityConfig(
 
 test('Save then Get round-trips the config with maps and enums intact', async () =>
 {
-    const store = await FileTenantConfigStore.Open(new FakeStorage())
+    const store = await FileRealmConfigStore.Open(new FakeStorage())
     await store.Save('t1', config)
     const got = await store.Get('t1')
     assert.equal(got?.PackId, 'server-pack')
@@ -23,12 +23,12 @@ test('Save then Get round-trips the config with maps and enums intact', async ()
     assert.equal(got?.ClaimsMapping.get('email'), 'email')
 })
 
-test('config survives a reopen; Get on unknown tenant is null; List enumerates', async () =>
+test('config survives a reopen; Get on unknown realm is null; List enumerates', async () =>
 {
     const storage = new FakeStorage()
-    const first = await FileTenantConfigStore.Open(storage)
+    const first = await FileRealmConfigStore.Open(storage)
     await first.Save('t1', config)
-    const second = await FileTenantConfigStore.Open(storage)
+    const second = await FileRealmConfigStore.Open(storage)
     assert.equal((await second.Get('t1'))?.PackId, 'server-pack')
     assert.equal(await second.Get('absent'), null)
     assert.deepEqual([...(await second.List())], ['t1'])

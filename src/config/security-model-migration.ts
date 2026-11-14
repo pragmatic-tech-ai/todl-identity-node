@@ -3,7 +3,7 @@ import type { IBusinessUnitConfig, ISecurityModelConfig, ITeamConfig, IUserPlace
 type RawRecord = Readonly<Record<string, unknown>>
 
 /** One-shot upgrade of a stored pre-C5 security model to the C5 shape. Runs once per stored record when the
- *  tenant config file is opened; the upgraded record is rewritten and nothing at runtime reads the old shape. */
+ *  realm config file is opened; the upgraded record is rewritten and nothing at runtime reads the old shape. */
 export class SecurityModelMigration
 {
     private static readonly OwnershipRulesKey = 'ownershipRules'

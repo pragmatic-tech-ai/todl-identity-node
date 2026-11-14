@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { AuthMethod, DelegationDepth, ResourceAuthorizationPolicy } from '@pragmatic-tech-ai/todl-identity'
-import type { AuthenticationResult, Credential, IAuthenticator, IAccessPolicy, AccessContext, AccessDecision, Action, EntityPredicate, PresentedSecret, ResourceRef, Tenant, IdentityStoreSet } from '@pragmatic-tech-ai/todl-identity'
+import type { AuthenticationResult, Credential, IAuthenticator, IAccessPolicy, AccessContext, AccessDecision, Action, EntityPredicate, PresentedSecret, ResourceRef, Realm, IdentityStoreSet } from '@pragmatic-tech-ai/todl-identity'
 import { ServerIdentityPack } from '../server-identity-pack.js'
 import { NodeStoresFixture } from './node-stores-fixture.js'
 
@@ -10,7 +10,7 @@ const NotCalledMessage = 'not called'
 class FakeOidc implements IAuthenticator
 {
     public readonly Method = AuthMethod.Oidc
-    public async Authenticate(_c: Credential, _p: PresentedSecret, _t: Tenant): Promise<AuthenticationResult>
+    public async Authenticate(_c: Credential, _p: PresentedSecret, _t: Realm): Promise<AuthenticationResult>
     {
         throw new Error(NotCalledMessage)
     }
