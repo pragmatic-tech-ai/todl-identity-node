@@ -41,6 +41,7 @@ test('reads a legacy accounts.json written with tenantId and writes realmId', as
     await first.AddMember(LegacyFx.Realm1, 'g1', 'p1')
     await LegacyFx.Legacy(storage, 'accounts.json', 'realmId', 'tenantId')
     const second = await FileAccountStore.Open(storage)
+    await LegacyFx.Written(storage, 'accounts.json', 'realmId', 'tenantId')
     assert.equal((await second.FindByEmail(LegacyFx.Realm1, 'a@x.io'))?.RealmId, 't1')
     assert.deepEqual((await second.FindByPrincipalId(LegacyFx.Realm1, 'p1'))?.PrincipalId, 'p1')
     await second.CreateAccount(LegacyFx.Realm1, 'b@x.io', 'p2', 't1/pwhash/p2')
@@ -62,6 +63,7 @@ test('reads a legacy sessions.json written with tenantId and writes realmId', as
     const session = await first.Issue(new Principal('p1', 't1', PrincipalKind.User, new Map(), []))
     await LegacyFx.Legacy(storage, 'sessions.json', 'realmId', 'tenantId')
     const second = await FileSessionStore.Open(storage)
+    await LegacyFx.Written(storage, 'sessions.json', 'realmId', 'tenantId')
     assert.equal((await second.Validate(session.Id))?.RealmId, 't1')
     await second.Issue(new Principal('p2', 't1', PrincipalKind.User, new Map(), []))
     await LegacyFx.Written(storage, 'sessions.json', 'realmId', 'tenantId')
@@ -74,6 +76,7 @@ test('reads a legacy service-tokens.json written with tenantId and writes realmI
     const issued = await first.Issue(LegacyFx.Realm1, 'p1', ['read'], null)
     await LegacyFx.Legacy(storage, 'service-tokens.json', 'realmId', 'tenantId')
     const second = await FileServiceTokenStore.Open(storage)
+    await LegacyFx.Written(storage, 'service-tokens.json', 'realmId', 'tenantId')
     assert.equal((await second.Resolve(LegacyFx.Realm1, new PresentedSecret(issued.Token)))?.PrincipalId, 'p1')
     await second.Issue(LegacyFx.Realm1, 'p2', ['read'], null)
     await LegacyFx.Written(storage, 'service-tokens.json', 'realmId', 'tenantId')
@@ -86,6 +89,7 @@ test('reads a legacy grants.json written with resourceTenantId and writes resour
     await first.Save(new Grant('p1', Role.Admin, new ResourceRef(ResourceKind.Realm, 't1', [])))
     await LegacyFx.Legacy(storage, 'grants.json', 'resourceRealmId', 'resourceTenantId')
     const second = await FileRoleGrantStore.Open(storage)
+    await LegacyFx.Written(storage, 'grants.json', 'resourceRealmId', 'resourceTenantId')
     const grants = await second.GrantsFor('p1', LegacyFx.Realm1)
     assert.equal(grants.length, 1)
     assert.equal(grants[0]!.Resource.RealmId, 't1')
@@ -102,6 +106,7 @@ test('an audit chain written before the rename still verifies, and the next reco
     await first.Record(new AuditEvent(AuditEventKind.AdminAction, 't1', 'p1', at, new Map([['action', 'b']])))
     await LegacyFx.Legacy(storage, 'audit.json', 'realmId', 'tenantId')
     const second = await FileAuditSink.Open(storage)
+    await LegacyFx.Written(storage, 'audit.json', 'realmId', 'tenantId')
     assert.equal(second.Verify('t1'), true)
     assert.equal(second.Records('t1').length, 2)
     await second.Record(new AuditEvent(AuditEventKind.AdminAction, 't1', 'p1', at, new Map([['action', 'c']])))
@@ -116,6 +121,7 @@ test('reads a legacy audit-anchors.json written with tenantId and writes realmId
     await first.Append(new AuditCheckpoint('t1', 1, 'h1', 'a1', 's1'))
     await LegacyFx.Legacy(storage, 'audit-anchors.json', 'realmId', 'tenantId')
     const second = await FileAuditCheckpointStore.Open(storage)
+    await LegacyFx.Written(storage, 'audit-anchors.json', 'realmId', 'tenantId')
     assert.equal((await second.Latest('t1'))?.Sequence, 1)
     assert.deepEqual(await second.Realms(), ['t1'])
     await second.Append(new AuditCheckpoint('t1', 2, 'h2', 'a2', 's2'))
@@ -130,6 +136,7 @@ test('reads a legacy idp-directory.json keyed by tenants and writes realms', asy
     await first.Save('t1', new IdpDirectorySnapshot(at, true, new Map([['dana', IdpUserState.Disabled]]), new Map()))
     await LegacyFx.Legacy(storage, 'idp-directory.json', 'realms', 'tenants')
     const second = await FileIdpDirectoryStore.Open(storage)
+    await LegacyFx.Written(storage, 'idp-directory.json', 'realms', 'tenants')
     assert.equal((await second.Get('t1'))?.Users().get('dana'), IdpUserState.Disabled)
     await second.Save('t2', new IdpDirectorySnapshot(at, false, new Map(), new Map()))
     await LegacyFx.Written(storage, 'idp-directory.json', 'realms', 'tenants')
@@ -143,7 +150,7 @@ class ConfigFx
     }
 }
 
-test('reads a legacy tenant-config.json; the first save writes realm-config.json and removes the old file', async () =>
+test('opening a legacy tenant-config.json moves it to realm-config.json at once', async () =>
 {
     const storage = new FakeStorage()
     const first = await FileRealmConfigStore.Open(storage)
@@ -151,6 +158,8 @@ test('reads a legacy tenant-config.json; the first save writes realm-config.json
     await storage.WriteText('tenant-config.json', await storage.ReadText('realm-config.json'))
     await storage.Delete('realm-config.json')
     const second = await FileRealmConfigStore.Open(storage)
+    assert.equal(await storage.Exists('realm-config.json'), true)
+    assert.equal(await storage.Exists('tenant-config.json'), false)
     assert.equal((await second.Get('t1'))?.PackId, 'local')
     await second.Save('t2', ConfigFx.Config('local'))
     assert.equal(await storage.Exists('realm-config.json'), true)

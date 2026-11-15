@@ -51,10 +51,9 @@ export class FileAuditSink implements IAuditSink
     {
         const file = new JsonFile(storage, FileAuditSink.FileName)
         const document = await file.Read<AuditDocument>({ events: [] })
-        LegacyRealmNames.UpgradeAll(document.events, LegacyRealmNames.LegacyRealmId, LegacyRealmNames.RealmId)
         const chain = new HashChainedAuditSink()
         const hashedRealms = new Set<string>()
-        let dirty = false
+        let dirty = LegacyRealmNames.UpgradeAll(document.events, LegacyRealmNames.LegacyRealmId, LegacyRealmNames.RealmId)
         for (const record of document.events)
         {
             const event = FileAuditSink.ToEvent(record)

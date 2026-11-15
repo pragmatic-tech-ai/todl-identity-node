@@ -40,7 +40,8 @@ export class FileRealmConfigStore implements IRealmConfigStore
         this.legacy = legacy
     }
 
-    /** Reads `realm-config.json`; only when it does not exist yet, the legacy `tenant-config.json` (one release). */
+    /** Reads `realm-config.json`; only when it does not exist yet, the legacy `tenant-config.json`, which it then moves
+     *  to `realm-config.json` at once. */
     public static async Open(storage: IStorage): Promise<FileRealmConfigStore>
     {
         const L = LegacyRealmNames
@@ -64,7 +65,7 @@ export class FileRealmConfigStore implements IRealmConfigStore
             }
         }
         const store = new FileRealmConfigStore(file, configs, invalid, legacy)
-        if (changed)
+        if (changed || legacy !== undefined)
         {
             await store.WriteDocument()
         }

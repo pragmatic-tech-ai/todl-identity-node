@@ -35,7 +35,10 @@ export class FileRoleGrantStore implements IRoleGrantStore
     {
         const file = new JsonFile(storage, FileRoleGrantStore.FileName)
         const document = await file.Read<GrantDocument>({ grants: [] })
-        LegacyRealmNames.UpgradeAll(document.grants, LegacyRealmNames.LegacyResourceRealmId, LegacyRealmNames.ResourceRealmId)
+        if (LegacyRealmNames.UpgradeAll(document.grants, LegacyRealmNames.LegacyResourceRealmId, LegacyRealmNames.ResourceRealmId))
+        {
+            await file.Write(document)
+        }
         return new FileRoleGrantStore(file, document.grants)
     }
 

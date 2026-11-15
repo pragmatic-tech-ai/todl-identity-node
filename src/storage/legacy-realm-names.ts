@@ -1,7 +1,7 @@
 /**
- * Reads identity files written before the Tenant -> Realm rename (one-release compatibility). Each store maps every
- * record through Upgrade when it opens; the record then carries only the current name, so the store's next write
- * stores the new name. When a record carries both names, the current one wins.
+ * Reads identity files written before the Tenant -> Realm rename (compatibility). Each store maps every record through
+ * Upgrade when it opens and, when anything was renamed, writes its file back at once, so the file on disk carries only
+ * the current names from then on. When a record carries both names, the current one wins.
  */
 export class LegacyRealmNames
 {
@@ -22,39 +22,41 @@ export class LegacyRealmNames
     {
     }
 
-    /** Moves `legacy` to `current` on `record` (in place) unless `current` is already set; drops `legacy` either way. */
-    public static Upgrade<T>(record: T, legacy: string, current: string): T
+    /** Moves `legacy` to `current` on `record` (in place) unless `current` is already set; drops `legacy` either way.
+     *  Answers true when the record carried the legacy name (so its file must be rewritten). */
+    public static Upgrade(record: unknown, legacy: string, current: string): boolean
     {
         if (typeof record !== 'object' || record === null)
         {
-            return record
+            return false
         }
         const fields = record as Record<string, unknown>
-        if (Object.prototype.hasOwnProperty.call(fields, legacy))
+        if (!Object.prototype.hasOwnProperty.call(fields, legacy))
         {
-            if (fields[current] === undefined)
-            {
-                fields[current] = fields[legacy]
-            }
-            delete fields[legacy]
+            return false
         }
-        return record
+        if (fields[current] === undefined)
+        {
+            fields[current] = fields[legacy]
+        }
+        delete fields[legacy]
+        return true
     }
 
-    /** Upgrade over every element of `records` (a missing list stays missing). */
-    public static UpgradeAll<T>(records: T[] | undefined, legacy: string, current: string): T[] | undefined
+    /** Upgrade over every element of `records` (a missing list stays missing); true when any record changed. */
+    public static UpgradeAll(records: readonly unknown[] | undefined, legacy: string, current: string): boolean
     {
-        records?.forEach(record => LegacyRealmNames.Upgrade(record, legacy, current))
-        return records
+        let changed = false
+        for (const record of records ?? [])
+        {
+            changed = LegacyRealmNames.Upgrade(record, legacy, current) || changed
+        }
+        return changed
     }
 
-    /** Upgrade over every value of a keyed map of records. */
-    public static UpgradeValues<T>(records: Record<string, T> | undefined, legacy: string, current: string): Record<string, T> | undefined
+    /** Upgrade over every value of a keyed map of records; true when any record changed. */
+    public static UpgradeValues(records: Readonly<Record<string, unknown>> | undefined, legacy: string, current: string): boolean
     {
-        for (const record of Object.values(records ?? {}))
-        {
-            LegacyRealmNames.Upgrade(record, legacy, current)
-        }
-        return records
+        return LegacyRealmNames.UpgradeAll(Object.values(records ?? {}), legacy, current)
     }
 }

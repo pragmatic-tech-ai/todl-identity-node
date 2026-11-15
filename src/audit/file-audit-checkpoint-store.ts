@@ -40,7 +40,10 @@ export class FileAuditCheckpointStore implements IAuditCheckpointStore
     {
         const file = new JsonFile(storage, FileAuditCheckpointStore.FileName)
         const document = await file.Read<AnchorDocument>({ checkpoints: [] })
-        LegacyRealmNames.UpgradeAll(document.checkpoints, LegacyRealmNames.LegacyRealmId, LegacyRealmNames.RealmId)
+        if (LegacyRealmNames.UpgradeAll(document.checkpoints, LegacyRealmNames.LegacyRealmId, LegacyRealmNames.RealmId))
+        {
+            await file.Write(document)
+        }
         return new FileAuditCheckpointStore(file, [...document.checkpoints])
     }
 

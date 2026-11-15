@@ -44,7 +44,10 @@ export class FileSessionStore implements ISessionManager
     {
         const file = new JsonFile(storage, FileSessionStore.FileName)
         const document = await file.Read<SessionDocument>({ sessions: {} })
-        LegacyRealmNames.UpgradeValues(document.sessions, LegacyRealmNames.LegacyRealmId, LegacyRealmNames.RealmId)
+        if (LegacyRealmNames.UpgradeValues(document.sessions, LegacyRealmNames.LegacyRealmId, LegacyRealmNames.RealmId))
+        {
+            await file.Write(document)
+        }
         return new FileSessionStore(file, new Map(Object.entries(document.sessions)), ttlMs, now)
     }
 

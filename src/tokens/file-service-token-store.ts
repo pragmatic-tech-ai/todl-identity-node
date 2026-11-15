@@ -45,7 +45,10 @@ export class FileServiceTokenStore implements IServiceTokenStore
     {
         const file = new JsonFile(storage, FileServiceTokenStore.FileName)
         const document = await file.Read<TokenDocument>({ records: {} })
-        LegacyRealmNames.UpgradeValues(document.records, LegacyRealmNames.LegacyRealmId, LegacyRealmNames.RealmId)
+        if (LegacyRealmNames.UpgradeValues(document.records, LegacyRealmNames.LegacyRealmId, LegacyRealmNames.RealmId))
+        {
+            await file.Write(document)
+        }
         return new FileServiceTokenStore(file, new Map(Object.entries(document.records)), now)
     }
 

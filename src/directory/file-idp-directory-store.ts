@@ -43,7 +43,10 @@ export class FileIdpDirectoryStore implements IIdpDirectoryStore
     {
         const file = new JsonFile(storage, FileIdpDirectoryStore.FileName)
         const document = await file.Read<DirectoryDocument>({ realms: {} })
-        LegacyRealmNames.Upgrade(document, LegacyRealmNames.LegacyRealms, LegacyRealmNames.Realms)
+        if (LegacyRealmNames.Upgrade(document, LegacyRealmNames.LegacyRealms, LegacyRealmNames.Realms))
+        {
+            await file.Write(document)
+        }
         return new FileIdpDirectoryStore(file, new Map(Object.entries(document.realms ?? {})))
     }
 

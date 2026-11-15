@@ -65,10 +65,10 @@ export class FileAccountStore implements ILocalAccountStore, IPrincipalDirectory
     {
         const file = new JsonFile(storage, FileAccountStore.FileName)
         const document = await file.Read<{ accounts: LegacyAccountRecord[], groups?: GroupRecord[] }>({ accounts: [] })
-        LegacyRealmNames.UpgradeAll(document.accounts, LegacyRealmNames.LegacyRealmId, LegacyRealmNames.RealmId)
-        LegacyRealmNames.UpgradeAll(document.groups, LegacyRealmNames.LegacyRealmId, LegacyRealmNames.RealmId)
+        const renamedAccounts = LegacyRealmNames.UpgradeAll(document.accounts, LegacyRealmNames.LegacyRealmId, LegacyRealmNames.RealmId)
+        const renamedGroups = LegacyRealmNames.UpgradeAll(document.groups, LegacyRealmNames.LegacyRealmId, LegacyRealmNames.RealmId)
         const groups = (document.groups ?? []).map(group => ({ ...group, memberIds: [...group.memberIds] }))
-        let migrated = false
+        let migrated = renamedAccounts || renamedGroups
         const accounts: AccountRecord[] = []
         for (const { groups: legacy, ...record } of document.accounts)
         {
