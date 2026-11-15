@@ -3,6 +3,7 @@ import { Session, AuthMethod } from '@pragmatic-tech-ai/todl-identity'
 import type { ISessionManager, Principal, Realm } from '@pragmatic-tech-ai/todl-identity'
 import type { IStorage } from '@pragmatic-tech-ai/todl-runtime'
 import { JsonFile } from '../storage/json-file.js'
+import { LegacyRealmNames } from '../storage/legacy-realm-names.js'
 
 interface SessionRecord
 {
@@ -43,6 +44,7 @@ export class FileSessionStore implements ISessionManager
     {
         const file = new JsonFile(storage, FileSessionStore.FileName)
         const document = await file.Read<SessionDocument>({ sessions: {} })
+        LegacyRealmNames.UpgradeValues(document.sessions, LegacyRealmNames.LegacyRealmId, LegacyRealmNames.RealmId)
         return new FileSessionStore(file, new Map(Object.entries(document.sessions)), ttlMs, now)
     }
 

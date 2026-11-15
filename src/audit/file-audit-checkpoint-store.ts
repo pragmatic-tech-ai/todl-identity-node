@@ -2,6 +2,7 @@ import { AuditCheckpoint } from '@pragmatic-tech-ai/todl-identity-host'
 import type { IAuditCheckpointStore } from '@pragmatic-tech-ai/todl-identity-host'
 import type { IStorage } from '@pragmatic-tech-ai/todl-runtime'
 import { JsonFile } from '../storage/json-file.js'
+import { LegacyRealmNames } from '../storage/legacy-realm-names.js'
 
 interface CheckpointRecord
 {
@@ -39,6 +40,7 @@ export class FileAuditCheckpointStore implements IAuditCheckpointStore
     {
         const file = new JsonFile(storage, FileAuditCheckpointStore.FileName)
         const document = await file.Read<AnchorDocument>({ checkpoints: [] })
+        LegacyRealmNames.UpgradeAll(document.checkpoints, LegacyRealmNames.LegacyRealmId, LegacyRealmNames.RealmId)
         return new FileAuditCheckpointStore(file, [...document.checkpoints])
     }
 

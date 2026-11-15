@@ -2,6 +2,7 @@ import { LocalAccount, LocalAccountNotFoundError, LocalGroup, LocalGroupNotFound
 import type { ILocalAccountStore, ILocalGroupStore, IPrincipalDirectory, Realm } from '@pragmatic-tech-ai/todl-identity'
 import type { IStorage } from '@pragmatic-tech-ai/todl-runtime'
 import { JsonFile } from '../storage/json-file.js'
+import { LegacyRealmNames } from '../storage/legacy-realm-names.js'
 
 interface AccountRecord
 {
@@ -64,6 +65,8 @@ export class FileAccountStore implements ILocalAccountStore, IPrincipalDirectory
     {
         const file = new JsonFile(storage, FileAccountStore.FileName)
         const document = await file.Read<{ accounts: LegacyAccountRecord[], groups?: GroupRecord[] }>({ accounts: [] })
+        LegacyRealmNames.UpgradeAll(document.accounts, LegacyRealmNames.LegacyRealmId, LegacyRealmNames.RealmId)
+        LegacyRealmNames.UpgradeAll(document.groups, LegacyRealmNames.LegacyRealmId, LegacyRealmNames.RealmId)
         const groups = (document.groups ?? []).map(group => ({ ...group, memberIds: [...group.memberIds] }))
         let migrated = false
         const accounts: AccountRecord[] = []

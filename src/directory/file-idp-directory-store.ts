@@ -2,6 +2,7 @@ import { IdpDirectorySnapshot, IdpUserState, UnreadableIdpDirectoryRecordError }
 import type { IIdpDirectoryStore } from '@pragmatic-tech-ai/todl-identity'
 import type { IStorage } from '@pragmatic-tech-ai/todl-runtime'
 import { JsonFile } from '../storage/json-file.js'
+import { LegacyRealmNames } from '../storage/legacy-realm-names.js'
 
 interface SnapshotRecord
 {
@@ -42,6 +43,7 @@ export class FileIdpDirectoryStore implements IIdpDirectoryStore
     {
         const file = new JsonFile(storage, FileIdpDirectoryStore.FileName)
         const document = await file.Read<DirectoryDocument>({ realms: {} })
+        LegacyRealmNames.Upgrade(document, LegacyRealmNames.LegacyRealms, LegacyRealmNames.Realms)
         return new FileIdpDirectoryStore(file, new Map(Object.entries(document.realms ?? {})))
     }
 

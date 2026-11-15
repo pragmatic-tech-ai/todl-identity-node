@@ -104,7 +104,7 @@ test('Disable of an unknown principal or another realm throws LocalAccountNotFou
 test('a legacy record without the disabled field reads back enabled', async () =>
 {
     const storage = new FakeStorage()
-    await storage.WriteText('accounts.json', JSON.stringify({ accounts: [{ principalId: 'p1', realmId: 't1', email: 'a@x.io', secretRef: 'r1', groups: [] }] }))
+    await storage.WriteText('accounts.json', JSON.stringify({ accounts: [{ principalId: 'p1', tenantId: 't1', email: 'a@x.io', secretRef: 'r1', groups: [] }] }))
     const store = await FileAccountStore.Open(storage)
     assert.equal((await store.ListAccounts(realm1))[0].Disabled, false)
     assert.equal((await store.Lookup('p1', realm1))?.Id, 'p1')
