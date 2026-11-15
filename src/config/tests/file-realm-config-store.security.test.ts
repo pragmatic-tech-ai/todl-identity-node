@@ -75,14 +75,12 @@ test('Save rejects an invalid model and writes nothing', async () =>
 test('a legacy record is migrated on open and rewritten once', async () =>
 {
     const storage = new FakeStorage()
-    await new JsonFile(storage, 'tenant-config.json').Write({ configs: { t1: Fixture.LegacyRecord() } })
+    await new JsonFile(storage, 'realm-config.json').Write({ configs: { t1: Fixture.LegacyRecord() } })
     const store = await FileRealmConfigStore.Open(storage)
     const model = (await store.Get('t1'))?.SecurityModel
     assert.deepEqual(model?.teams, [{ id: 'hr', name: 'HR team', businessUnitId: 'hr', idpGroups: ['hr-staff'], manualMembers: ['dana'] }])
     assert.deepEqual(model?.users, [{ principalId: 'dana', businessUnitId: 'hr' }])
 
-    // The upgrade is written to realm-config.json; the legacy file the record came from is gone.
-    assert.equal(await storage.Exists('tenant-config.json'), false)
     const raw = JSON.parse(await storage.ReadText('realm-config.json')) as { configs: Record<string, { securityModel: Record<string, unknown> }> }
     const keys = Object.keys(raw.configs.t1.securityModel)
     for (const retired of ['ownershipRules', 'fieldSecurity', 'membership', 'roles', 'roleAssignment'])
@@ -98,7 +96,7 @@ test('a null stored securityModel is invalid for that realm only and does not cr
     const bad = { ...Fixture.LegacyRecord(), securityModel: null }
     const badSettings = { ...Fixture.LegacyRecord(), providerSettings: 'oops' }
     const badDepth = { ...Fixture.LegacyRecord(), delegationDepth: 'FullAuthz' }
-    await new JsonFile(storage, 'tenant-config.json').Write({ configs: { bad, badSettings, badDepth, good: Fixture.LegacyRecord() } })
+    await new JsonFile(storage, 'realm-config.json').Write({ configs: { bad, badSettings, badDepth, good: Fixture.LegacyRecord() } })
     const store = await FileRealmConfigStore.Open(storage)
     await assert.rejects(store.Get('bad'), InvalidSecurityModelError)
     await assert.rejects(store.Get('badSettings'), (e: unknown) => e instanceof InvalidRealmConfigError && e.RealmId === 'badSettings')

@@ -29,7 +29,7 @@ test('file groups persist across reopen and feed Lookup', async () =>
 test('legacy account groups become group records on open', async () =>
 {
     const storage = new FakeStorage()
-    await storage.WriteText('accounts.json', JSON.stringify({ accounts: [{ principalId: 'p1', tenantId: 't1', email: 'a@x.io', secretRef: 'r1', groups: ['g1'] }] }))
+    await storage.WriteText('accounts.json', JSON.stringify({ accounts: [{ principalId: 'p1', realmId: 't1', email: 'a@x.io', secretRef: 'r1', groups: ['g1'] }] }))
     const store = await FileAccountStore.Open(storage)
     assert.deepEqual((await store.Lookup('p1', realm))?.Groups, ['g1'])
     const group = (await store.ListGroups(realm))[0]

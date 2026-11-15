@@ -3,7 +3,6 @@ import type { IRealmConfigStore, ISecurityModelConfig } from '@pragmatic-tech-ai
 import type { IStorage } from '@pragmatic-tech-ai/todl-runtime'
 import { InvalidRealmConfigError } from './invalid-realm-config-error.js'
 import { JsonFile } from '../storage/json-file.js'
-import { LegacyRealmNames } from '../storage/legacy-realm-names.js'
 import { SecurityModelMigration } from './security-model-migration.js'
 
 interface ConfigRecord
@@ -23,31 +22,26 @@ interface ConfigDocument
 
 export class FileRealmConfigStore implements IRealmConfigStore
 {
+    private static readonly ConfigFile = 'realm-config.json'
     private static readonly SecurityModelPath = 'securityModel'
     private static readonly NotAnObjectMessage = 'stored security model is not an object'
 
     private readonly file: JsonFile
     private readonly configs: Map<string, ConfigRecord>
     private readonly invalid: Map<string, Error>
-    /** Set while the configs still come from the legacy `tenant-config.json`; the first write removes that file. */
-    private legacy: IStorage | undefined
 
-    private constructor(file: JsonFile, configs: Map<string, ConfigRecord>, invalid: Map<string, Error>, legacy: IStorage | undefined)
+    private constructor(file: JsonFile, configs: Map<string, ConfigRecord>, invalid: Map<string, Error>)
     {
         this.file = file
         this.configs = configs
         this.invalid = invalid
-        this.legacy = legacy
     }
 
-    /** Reads `realm-config.json`; only when it does not exist yet, the legacy `tenant-config.json` (one release). */
+    /** Reads `realm-config.json`. */
     public static async Open(storage: IStorage): Promise<FileRealmConfigStore>
     {
-        const L = LegacyRealmNames
-        const file = new JsonFile(storage, L.ConfigFile)
-        const legacy = !await storage.Exists(L.ConfigFile) && await storage.Exists(L.LegacyConfigFile) ? storage : undefined
-        const source = legacy === undefined ? file : new JsonFile(storage, L.LegacyConfigFile)
-        const document = await source.Read<ConfigDocument>({ configs: {} })
+        const file = new JsonFile(storage, FileRealmConfigStore.ConfigFile)
+        const document = await file.Read<ConfigDocument>({ configs: {} })
         const configs = new Map(Object.entries(document.configs ?? {}))
         const invalid = new Map<string, Error>()
         let changed = false
@@ -63,7 +57,7 @@ export class FileRealmConfigStore implements IRealmConfigStore
                 invalid.set(realmId, new InvalidRealmConfigError(realmId))
             }
         }
-        const store = new FileRealmConfigStore(file, configs, invalid, legacy)
+        const store = new FileRealmConfigStore(file, configs, invalid)
         if (changed)
         {
             await store.WriteDocument()
@@ -71,15 +65,10 @@ export class FileRealmConfigStore implements IRealmConfigStore
         return store
     }
 
-    /** Writes every config to `realm-config.json`; the first write after a legacy read also removes `tenant-config.json`. */
+    /** Writes every config to `realm-config.json`. */
     private async WriteDocument(): Promise<void>
     {
         await this.file.Write({ configs: Object.fromEntries(this.configs) } satisfies ConfigDocument)
-        if (this.legacy !== undefined)
-        {
-            await this.legacy.Delete(LegacyRealmNames.LegacyConfigFile)
-            this.legacy = undefined
-        }
     }
 
     // Returns true when the record's security model was upgraded in place.

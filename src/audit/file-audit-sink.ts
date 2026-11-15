@@ -4,7 +4,6 @@ import { AuditTamperDetected, HashChainedAuditSink } from '@pragmatic-tech-ai/to
 import type { AuditAnchoring, ChainedAuditRecord } from '@pragmatic-tech-ai/todl-identity-host'
 import type { IStorage } from '@pragmatic-tech-ai/todl-runtime'
 import { JsonFile } from '../storage/json-file.js'
-import { LegacyRealmNames } from '../storage/legacy-realm-names.js'
 
 interface EventRecord
 {
@@ -51,7 +50,6 @@ export class FileAuditSink implements IAuditSink
     {
         const file = new JsonFile(storage, FileAuditSink.FileName)
         const document = await file.Read<AuditDocument>({ events: [] })
-        LegacyRealmNames.UpgradeAll(document.events, LegacyRealmNames.LegacyRealmId, LegacyRealmNames.RealmId)
         const chain = new HashChainedAuditSink()
         const hashedRealms = new Set<string>()
         let dirty = false

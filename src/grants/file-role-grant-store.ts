@@ -2,7 +2,6 @@ import { Grant, Role, ResourceRef, ResourceKind } from '@pragmatic-tech-ai/todl-
 import type { IRoleGrantStore, Realm } from '@pragmatic-tech-ai/todl-identity'
 import type { IStorage } from '@pragmatic-tech-ai/todl-runtime'
 import { JsonFile } from '../storage/json-file.js'
-import { LegacyRealmNames } from '../storage/legacy-realm-names.js'
 
 interface GrantRecord
 {
@@ -35,7 +34,6 @@ export class FileRoleGrantStore implements IRoleGrantStore
     {
         const file = new JsonFile(storage, FileRoleGrantStore.FileName)
         const document = await file.Read<GrantDocument>({ grants: [] })
-        LegacyRealmNames.UpgradeAll(document.grants, LegacyRealmNames.LegacyResourceRealmId, LegacyRealmNames.ResourceRealmId)
         return new FileRoleGrantStore(file, document.grants)
     }
 

@@ -3,7 +3,6 @@ import { ServiceTokenGrant, ServiceTokenSummary } from '@pragmatic-tech-ai/todl-
 import type { IServiceTokenStore, Realm, PresentedSecret } from '@pragmatic-tech-ai/todl-identity'
 import type { IStorage } from '@pragmatic-tech-ai/todl-runtime'
 import { JsonFile } from '../storage/json-file.js'
-import { LegacyRealmNames } from '../storage/legacy-realm-names.js'
 
 interface GrantRecord
 {
@@ -45,7 +44,6 @@ export class FileServiceTokenStore implements IServiceTokenStore
     {
         const file = new JsonFile(storage, FileServiceTokenStore.FileName)
         const document = await file.Read<TokenDocument>({ records: {} })
-        LegacyRealmNames.UpgradeValues(document.records, LegacyRealmNames.LegacyRealmId, LegacyRealmNames.RealmId)
         return new FileServiceTokenStore(file, new Map(Object.entries(document.records)), now)
     }
 
