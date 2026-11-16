@@ -1,7 +1,10 @@
 {
   "name": "@pragmatic-tech-ai/todl-identity-node",
   "version": "0.1.0",
-  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pragmatic-tech-ai/todl-identity-node.git"
+  },
   "type": "module",
   "exports": {
     ".": {
@@ -14,14 +17,21 @@
     "test": "tsx --test \"src/**/*.test.ts\""
   },
   "dependencies": {
-    "@pragmatic-tech-ai/todl-identity": "file:../todl-identity",
-    "@pragmatic-tech-ai/todl-identity-local": "file:../todl-identity-local",
-    "@pragmatic-tech-ai/todl-identity-host": "file:../todl-identity-host",
-    "@pragmatic-tech-ai/todl-runtime": "file:../todl-runtime"
+    "@pragmatic-tech-ai/todl-identity": "^0.1.0",
+    "@pragmatic-tech-ai/todl-identity-local": "^0.1.0",
+    "@pragmatic-tech-ai/todl-identity-host": "^0.1.0",
+    "@pragmatic-tech-ai/todl-runtime": "^0.7.0"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",
     "tsx": "^4.0.0",
     "typescript": "^5.5.0"
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "public"
   }
 }
